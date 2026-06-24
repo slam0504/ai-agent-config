@@ -113,3 +113,8 @@ re-run. To overwrite anyway (a backup is still taken):
 ```sh
 ./install.sh --force
 ```
+
+The guard applies to machine-editable targets (`CLAUDE.md`, `AGENTS.md`,
+`config.toml`). Repo-authoritative targets the machine should never hand-edit —
+`memories/approved/` — are exempt and overwritten directly, so routine memory
+updates don't require `--force`.

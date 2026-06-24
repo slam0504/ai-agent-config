@@ -41,16 +41,21 @@ copy_with_backup() {
   echo "installed $dst"
 }
 
+# mode (3rd arg): "guard" (default) applies the drift guard; "overwrite" exempts
+# the dst from the guard — use it for repo-authoritative targets the machine
+# should never hand-edit (e.g. memories/approved/), to avoid needing --force on
+# every routine memory update.
 copy_dir_with_backup() {
   src="$1"
   dst="$2"
+  mode="${3:-guard}"
 
   if [ ! -d "$src" ]; then
     echo "missing source directory: $src" >&2
     exit 1
   fi
 
-  if [ -e "$dst" ] && [ "$force" -eq 0 ] && ! diff -rq "$src" "$dst" >/dev/null 2>&1; then
+  if [ "$mode" = "guard" ] && [ -e "$dst" ] && [ "$force" -eq 0 ] && ! diff -rq "$src" "$dst" >/dev/null 2>&1; then
     echo "DRIFT: $dst differs from repo source; skipped (re-run with --force)" >&2
     skipped="$skipped $dst"
     return 0
@@ -115,9 +120,9 @@ copy_with_backup "$repo_dir/codex/AGENTS.md" "$HOME/.codex/AGENTS.md"
 build_codex_config
 copy_with_backup "$repo_dir/claude/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
 copy_dir_with_backup "$repo_dir/codex/skills/distill" "$HOME/.agents/skills/distill"
-copy_dir_with_backup "$repo_dir/memories/approved" "$HOME/.codex/docs/memories/approved"
+copy_dir_with_backup "$repo_dir/memories/approved" "$HOME/.codex/docs/memories/approved" overwrite
 copy_dir_with_backup "$repo_dir/claude/skills/distill" "$HOME/.claude/skills/distill"
-copy_dir_with_backup "$repo_dir/memories/approved" "$HOME/.claude/docs/memories/approved"
+copy_dir_with_backup "$repo_dir/memories/approved" "$HOME/.claude/docs/memories/approved" overwrite
 
 if [ -d "${backup_dir%/*}" ] && [ -d "$backup_dir" ]; then
   echo "backup: $backup_dir"

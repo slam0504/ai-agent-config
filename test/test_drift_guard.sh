@@ -11,13 +11,17 @@ HOME="$fake_home" sh "$repo_dir/install.sh" >/dev/null 2>&1
 
 fail=0
 
-# 製造 drift:本機編輯一個已同步檔
+# 製造 drift:本機編輯一個 guarded 檔(CLAUDE.md)與一個 exempt 目標(approved memory)
 echo "LOCAL EDIT MARKER" >> "$fake_home/.claude/CLAUDE.md"
+echo "LOCAL EDIT MARKER" >> "$fake_home/.claude/docs/memories/approved/preferences.md"
 
-# 第二次安裝(無 --force):應 skip CLAUDE.md、保留本機編輯、輸出 drift 警告
+# 第二次安裝(無 --force):
+#   - CLAUDE.md(guard):skip、保留本機編輯、輸出 drift 警告
+#   - approved memory(overwrite 豁免):直接覆蓋、本機編輯消失,不需 --force
 out=$(HOME="$fake_home" sh "$repo_dir/install.sh" 2>&1 || true)
 grep -q "LOCAL EDIT MARKER" "$fake_home/.claude/CLAUDE.md" || { echo "FAIL: drift guard overwrote local edit without --force"; fail=1; }
 printf '%s\n' "$out" | grep -qi "drift" || { echo "FAIL: no drift warning emitted"; fail=1; }
+if grep -q "LOCAL EDIT MARKER" "$fake_home/.claude/docs/memories/approved/preferences.md"; then echo "FAIL: approved memory not exempt from drift guard (still drifted without --force)"; fail=1; fi
 
 # 第三次安裝(--force):應覆蓋、本機編輯消失
 HOME="$fake_home" sh "$repo_dir/install.sh" --force >/dev/null 2>&1
