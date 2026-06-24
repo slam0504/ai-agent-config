@@ -53,8 +53,7 @@ working context
 
 Claude and Codex use different trigger surfaces:
 
-- Claude: use the Claude `distill` flow, such as `/distill` if the Claude-side
-  command or skill defines that trigger.
+- Claude: invoke the Claude `distill` skill with `/distill`.
 - Codex: invoke the Codex skill with `$distill`.
 
 The directories have distinct meanings:
