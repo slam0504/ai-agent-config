@@ -1,0 +1,19 @@
+.DS_Store
+
+# Secrets and machine-local credentials
+.env
+.env.*
+*.key
+*.pem
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+
+# Generated agent memory/state should be curated before committing.
+codex/memories/
+claude/memories/
+raw_memories.md
+memory_summary.md
+rollout_summaries/
+
