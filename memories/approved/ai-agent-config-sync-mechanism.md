@@ -27,9 +27,15 @@ memory 同步到本機 agent。memory 採三目錄 review → approved 閘門。
 `~/.codex/config.toml` 由 `codex/config.toml.template`（可攜）+ gitignored
 `codex/config.local.toml`（機器專屬路徑 / trust）組裝；絕對路徑與 trust 不跨機器同步。
 
-`install.sh` 有 **drift guard**：dst 與 repo source 不同且無 `--force` 時 skip 並提示，
-不靜默覆蓋。改全域設定要動 repo 源檔（見 [[edit-global-config-via-repo-source]]），而非 home 檔。
+`install.sh` 有 **drift guard**，但**按目標分流**(設計決策):
+- 機器可手改的目標(`CLAUDE.md` / `AGENTS.md` / `config.toml`):dst 與 repo source 不同且
+  無 `--force` 時 skip 並提示,不靜默覆蓋。改全域設定要動 repo 源檔
+  (見 [[edit-global-config-via-repo-source]]),而非 home 檔。
+- repo 單向權威、本機不該手改的目標(`memories/approved/`):**豁免** guard、直接覆蓋,
+  所以例行 memory 更新落地**不需** `--force`。
+- skill 目錄目前仍受 guard(改動少、friction 低);日後若嫌煩可比照 approved 豁免。
 
 **How to apply：** 要新增跨機器 durable memory 時，用 distill 產生候選 → 寫
 `memories/review/` → 人工 approve 後移 `memories/approved/` → commit/push →
-另一台機器 pull + `./install.sh`（本機改動會被 drift guard 擋，確認後 `--force`）。
+另一台機器 pull + `./install.sh`(approved memory 直接落地;若同時改了 CLAUDE.md 等
+guarded 檔且有本機 drift,該檔需確認後 `--force`)。
