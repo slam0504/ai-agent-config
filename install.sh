@@ -48,6 +48,8 @@ copy_with_backup "$repo_dir/codex/config.toml" "$HOME/.codex/config.toml"
 copy_with_backup "$repo_dir/claude/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
 copy_dir_with_backup "$repo_dir/codex/skills/distill" "$HOME/.agents/skills/distill"
 copy_dir_with_backup "$repo_dir/memories/approved" "$HOME/.codex/docs/memories/approved"
+copy_dir_with_backup "$repo_dir/claude/skills/distill" "$HOME/.claude/skills/distill"
+copy_dir_with_backup "$repo_dir/memories/approved" "$HOME/.claude/docs/memories/approved"
 
 if [ -d "${backup_dir%/*}" ] && [ -d "$backup_dir" ]; then
   echo "backup: $backup_dir"
