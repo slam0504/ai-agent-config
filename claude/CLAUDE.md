@@ -329,3 +329,19 @@ Project-specific 事實 / 任務狀態請看 `~/.claude/projects/<slug>/memory/`
 - 當前 project 工作流（今天改了哪份檔、明天接續做什麼）→ remember plugin
 
 不要把三個系統當同一種東西用。
+
+### 持續學習 loop
+
+模型權重在 session 間凍結，本身不會學。「累積經驗」唯一路徑是把經驗外化成檔案、下次以 context 載回。流程：**capture → distill → route → recall → prune**。
+
+- **capture**：工作中產生的脈絡先留在 `.remember/` 與 project auto-memory（raw）。
+- **distill**：使用者明確要求時跑 `/distill`，自動掃描可見脈絡 + `.remember/` + project memory，輸出候選，人工 approve 後才寫入。不掛 Stop hook，不隱式升級一般 summary。
+- **route**：候選按 scope 分流 — 跨 project 規則 → CLAUDE.md；單一 project verified fact → project auto-memory；可重用 pattern（滿三次）→ skill；跨機器 durable → `ai-agent-config/memories/review/`。
+- **recall**：使用 approved / project memory 前，檢查 `confidence`、`verified_on` 與具體檔案事實；assumed 或過舊或涉及特定 file / function / flag 時先重新驗證再用。
+- **prune**：錯的當場刪 / 改，不疊折衷。
+
+同步邊界（對齊 `ai-agent-config`）：
+
+- **raw memory 不同步**：`~/.claude/projects/*/memory/` 與 `.remember/` 是本機 generated state，絕不當 GitHub 同步來源。
+- **review memory 不載入**：`memories/review/` 是候選區，不作為 durable context 載入。
+- **approved memory 才可跨機器同步**：經人工 approve 進 `memories/approved/`，install 後落在 `~/.claude/docs/memories/approved/`。
