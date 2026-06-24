@@ -94,3 +94,22 @@ From a clone of this repo:
 ```
 
 The script backs up existing destination files before copying.
+
+### Codex config
+
+`~/.codex/config.toml` is assembled from `codex/config.toml.template` (portable
+settings) plus an optional, gitignored `codex/config.local.toml` (machine-specific
+project paths and trust). Copy `codex/config.local.toml.example` to
+`codex/config.local.toml` on each machine; absolute paths and trust state are never
+synced across machines.
+
+### Drift guard
+
+If a destination already exists and differs from the repo source, `install.sh`
+skips it and reports the drift instead of silently overwriting (it may hold
+un-synced local edits). The canonical fix is to edit the **repo source** and
+re-run. To overwrite anyway (a backup is still taken):
+
+```sh
+./install.sh --force
+```
