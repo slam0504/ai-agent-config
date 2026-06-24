@@ -20,6 +20,16 @@ memory 同步到本機 agent。memory 採三目錄 review → approved 閘門。
 - raw memory(`~/.claude/projects/*/memory/`、`~/.codex/memories/`、`.remember/`)
   是本機 generated state，**絕不**當 GitHub 同步來源。
 
+兩端 distill skill 各一份（harness 各自只讀自家目錄）：Claude `claude/skills/distill/`
+→ `~/.claude/skills/distill/`（觸發 `/distill`）；Codex `codex/skills/distill/`
+→ `~/.agents/skills/distill/`（觸發 `$distill`）。
+
+`~/.codex/config.toml` 由 `codex/config.toml.template`（可攜）+ gitignored
+`codex/config.local.toml`（機器專屬路徑 / trust）組裝；絕對路徑與 trust 不跨機器同步。
+
+`install.sh` 有 **drift guard**：dst 與 repo source 不同且無 `--force` 時 skip 並提示，
+不靜默覆蓋。改全域設定要動 repo 源檔（見 [[edit-global-config-via-repo-source]]），而非 home 檔。
+
 **How to apply：** 要新增跨機器 durable memory 時，用 distill 產生候選 → 寫
 `memories/review/` → 人工 approve 後移 `memories/approved/` → commit/push →
-另一台機器 pull + `./install.sh`。
+另一台機器 pull + `./install.sh`（本機改動會被 drift guard 擋，確認後 `--force`）。
