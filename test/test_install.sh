@@ -19,5 +19,14 @@ fail=0
 [ ! -e "$fake_home/.claude/docs/memories/review" ] || { echo "FAIL: review/ leaked into claude"; fail=1; }
 if grep -rq "AKIAFAKESECRET12345" "$fake_home" 2>/dev/null; then echo "FAIL: secret leaked into installed tree"; fail=1; fi
 
+# F2: ~/.codex/config.toml is assembled from the portable template, and (when the
+# machine overlay exists) includes its trust blocks. The tracked repo must not
+# contain a monolithic codex/config.toml.
+grep -q '^model = ' "$fake_home/.codex/config.toml" || { echo "FAIL: codex config missing portable template content"; fail=1; }
+[ ! -f "$repo_dir/codex/config.toml" ] || { echo "FAIL: monolithic codex/config.toml still tracked in repo"; fail=1; }
+if [ -f "$repo_dir/codex/config.local.toml" ]; then
+  grep -q 'trust_level' "$fake_home/.codex/config.toml" || { echo "FAIL: codex config missing local overlay trust blocks"; fail=1; }
+fi
+
 [ "$fail" -eq 0 ] && echo "PASS: install sync boundaries correct"
 exit "$fail"

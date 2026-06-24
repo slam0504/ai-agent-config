@@ -43,8 +43,37 @@ copy_dir_with_backup() {
   echo "installed $dst"
 }
 
+# Build ~/.codex/config.toml from the portable template plus an optional,
+# machine-specific overlay (codex/config.local.toml, gitignored). Keeps absolute
+# project paths and trust state out of the synced repo.
+build_codex_config() {
+  template="$repo_dir/codex/config.toml.template"
+  overlay="$repo_dir/codex/config.local.toml"
+  dst="$HOME/.codex/config.toml"
+
+  if [ ! -f "$template" ]; then
+    echo "missing source: $template" >&2
+    exit 1
+  fi
+
+  if [ -e "$dst" ]; then
+    mkdir -p "$backup_dir/$(dirname "${dst#$HOME/}")"
+    cp "$dst" "$backup_dir/${dst#$HOME/}"
+  fi
+
+  mkdir -p "$(dirname "$dst")"
+  cat "$template" > "$dst"
+  if [ -f "$overlay" ]; then
+    printf '\n' >> "$dst"
+    cat "$overlay" >> "$dst"
+    echo "installed $dst (template + local overlay)"
+  else
+    echo "installed $dst (template only — no codex/config.local.toml)"
+  fi
+}
+
 copy_with_backup "$repo_dir/codex/AGENTS.md" "$HOME/.codex/AGENTS.md"
-copy_with_backup "$repo_dir/codex/config.toml" "$HOME/.codex/config.toml"
+build_codex_config
 copy_with_backup "$repo_dir/claude/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
 copy_dir_with_backup "$repo_dir/codex/skills/distill" "$HOME/.agents/skills/distill"
 copy_dir_with_backup "$repo_dir/memories/approved" "$HOME/.codex/docs/memories/approved"

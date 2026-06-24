@@ -17,3 +17,6 @@ raw_memories.md
 memory_summary.md
 rollout_summaries/
 
+# Machine-specific Codex overlay (absolute project paths + trust). Not portable.
+codex/config.local.toml
+

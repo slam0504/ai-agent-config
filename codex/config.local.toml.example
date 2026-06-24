@@ -1,0 +1,11 @@
+# Machine-specific Codex settings overlay (example).
+#
+# Copy to codex/config.local.toml and edit for this machine. The real
+# config.local.toml is gitignored, so machine paths and trust state never sync
+# across machines. install.sh concatenates this onto config.toml.template to
+# build ~/.codex/config.toml.
+#
+# Add one block per locally-trusted project (absolute paths are machine-specific):
+
+[projects."/Users/example/path/to/project"]
+trust_level = "trusted"
