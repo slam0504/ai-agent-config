@@ -331,3 +331,12 @@
 - 跨專案、跨工具適用的協作原則 → 兩邊全域檔(`~/.codex/AGENTS.md` + `~/.claude/CLAUDE.md`)
 - 只在某專案內有意義的事實 / 慣例(特定 incident 細節、特定 config 對齊)→ 該專案的 `AGENTS.md`(Codex 端)或 `CLAUDE.md` / auto memory(Claude 端)
 - 當前 session 暫時性的工作狀態(今天改了哪份檔、明天接續做什麼)→ 不要寫進規範檔,改用 session 內筆記或專案的 handoff 檔
+
+### Reviewed memory
+
+跨機器同步的 durable memory 只信任已審核內容,預設安裝位置是 `~/.codex/docs/memories/approved/`。
+
+- `~/.codex/memories/` 是 Codex 產生的 local state,可查閱但不要直接同步或當主要控制面
+- `memories/review/` 是候選區,未審核前不要載入成長期規則
+- 需要新增跨機器 memory 時,使用 `$distill` 產生候選並經使用者確認後再進 approved
+- approved memory 若與 `AGENTS.md` 或當前對話指示衝突,仍以較具體、較新的指示優先
