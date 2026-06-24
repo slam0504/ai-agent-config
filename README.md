@@ -35,6 +35,57 @@ For Codex, only `memories/approved/` is installed for agent use.
 `memories/review/` stays as a review queue and must not be loaded as durable
 context.
 
+## Memory Review Workflow
+
+Use this flow whenever Claude or Codex finds context that may be worth keeping
+across machines:
+
+```text
+working context
+        -> distill
+        -> memories/review/
+        -> human review
+        -> memories/approved/
+        -> commit + push
+        -> pull + ./install.sh on another machine
+        -> agents read approved memory only
+```
+
+Claude and Codex use different trigger surfaces:
+
+- Claude: use the Claude `distill` flow, such as `/distill` if the Claude-side
+  command or skill defines that trigger.
+- Codex: invoke the Codex skill with `$distill`.
+
+The directories have distinct meanings:
+
+- `memories/review/`: proposed entries. These are not durable rules yet and
+  must not be loaded automatically.
+- `memories/approved/`: reviewed entries. These are the only memories intended
+  for cross-machine sync and agent use.
+- `memories/rejected/`: optional audit trail for rejected candidates.
+
+Typical Codex flow:
+
+1. Ask Codex to distill current work:
+
+   ```text
+   $distill What from this work should become long-term memory?
+   ```
+
+2. Review the proposed candidates. Approve, edit, or drop each item.
+3. Approved-for-review candidates are written to `memories/review/`.
+4. After final human approval, move the entry to `memories/approved/`.
+5. Commit and push the approved memory.
+6. On another machine, pull the repo and run `./install.sh`.
+
+Do not sync raw memory sources directly:
+
+- Do not sync `~/.codex/memories/`.
+- Do not sync `~/.claude/projects/*/memory/`.
+- Do not sync `.remember/`.
+- Do not load `memories/review/` as durable context.
+
 ## Install
 
 From a clone of this repo:
