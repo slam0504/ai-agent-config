@@ -1,11 +1,11 @@
 ---
-status: review
+status: approved
 scope: global
 applies_to: both
 confidence: verified
 verified_on: 2026-06-24
 source: distill
-reviewed_by:
+reviewed_by: slam0504
 ---
 
 # 改全域 CLAUDE.md / AGENTS.md 要動 repo 源檔，不可直改 home

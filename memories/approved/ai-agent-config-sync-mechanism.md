@@ -1,11 +1,11 @@
 ---
-status: review
+status: approved
 scope: global
 applies_to: both
 confidence: verified
 verified_on: 2026-06-24
 source: distill
-reviewed_by:
+reviewed_by: slam0504
 ---
 
 # ai-agent-config 是跨機器 / 跨工具的 agent 設定與 memory 同步機制
