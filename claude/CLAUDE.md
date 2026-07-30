@@ -54,6 +54,10 @@ Project-specific 事實 / 任務狀態請看 `~/.claude/projects/<slug>/memory/`
 
 優先選擇滿足已確認需求的最小可靠方案。不在沒有實際重複或複雜度支撐時新增 abstraction、不把局部 bug fix 擴大成大範圍 refactor、不預先設計用不到的 extension point、不為「看起來完整」加入沒有驗證價值的文件或流程。只有現有 code 已出現實際重複、repo 已有明確 pattern、或使用者明確要求可擴充性時，才引入較大設計。
 
+### Subagent 委派
+
+只有大型、可獨立完成且可平行的工作流才委派 subagent。幾個 tool calls 可完成的讀取、序列操作或局部修改直接處理；不要自發為複驗自己的結果而委派，一個 subagent 足夠時不要啟動多個。使用者明定的 subagent review／test 流程，依該流程的觸發條件與數量執行，不視為自發複驗。
+
 ### 驗證責任
 
 Implementation plan 必須包含驗證策略：要跑哪些 test / lint / build / typecheck、用哪些 API call、log 或手動操作確認行為、哪些無法在本機驗證及替代檢查方式與剩餘風險。不得把「應該可以」當成驗證結果；只有實際執行過、讀過證據、或使用者明確確認後，才能寫「已驗證 / confirmed」。
@@ -89,9 +93,10 @@ Implementation plan 必須包含驗證策略：要跑哪些 test / lint / build 
 - 不過度自我批判：中性指引不要讀成責備、不長篇道歉；「打臉 / 翻轉 / 重大發現」這類強度詞不要包裝事實
 - 教學性補充只在真有教學價值時寫、2-3 短點，不固定套用輸出模板
 
-### Claude Fable 5 effort
+### 模型 effort 設定
 
 - 全域維持 `high`；例行、邊界明確或重視互動速度的 session 用 `--effort medium` 或 `low`；只有最吃能力或預期超過 30 分鐘的長任務才用 `xhigh`
+- effort 需依模型與實際 workload 重新校準；同名 level 不代表相同 token 配置，換模型時不要直接沿用先前調校
 - 任務已正確完成但耗時過長時，優先降低 effort，不要疊加更多 prompt 來限制模型
 
 ---
