@@ -80,10 +80,11 @@ Implementation plan 必須包含驗證策略：要跑哪些 test / lint / build 
 
 ### 台灣慣用語
 
-- 書面中文（報告、plan 檔、技術文件、commit message、MR / PR 描述）遵循台灣慣用語；完整詞表與校對工作流見 `~/.claude/docs/memories/approved/taiwan-wording-vocabulary.md`，輸出書面中文前對照
+- 所有中文輸出（含對話回覆）預設優先使用台灣慣用語，不確定時先選台灣用法或標出讓使用者選；書面中文（報告、plan 檔、技術文件、commit message、MR / PR 描述）要求更嚴：完整詞表與校對工作流見 `~/.claude/docs/memories/approved/taiwan-wording-vocabulary.md`，輸出書面中文前對照
 - 核心原則：台灣中文語境沒有合適對應詞時，直接用英文原文並附註說明，不要生造中文譯名
+- 代理人速記（守門、打紅、零接線這類生造壓縮詞）不得出現在對使用者的書面中文，須展開成完整句子；僅供代理人使用的內部紀錄可保留精確英文術語。技術內容完成後另做一次語言校對，校對不得改變技術判定；速記詞表與構詞模式見同一份 taiwan-wording-vocabulary.md
 - 避免「動詞+爆」構詞、帶政治梗的流行語；中性網路語閒聊可用、正式書面避免
-- 全文詞彙替換前先 grep 既有用詞對齊 dominant 版本；不確定某詞是否台灣常用時，標出讓使用者選
+- 全文詞彙替換前先 grep 既有用詞，對齊目前最常使用的版本；不確定某詞是否台灣常用時，標出讓使用者選
 
 ### 回應風格
 
