@@ -12,6 +12,11 @@ def status_line(root):
     d = c.rl_dir(root)
     state = c.read_state(root)
     it = f"{state.get('iteration', 0)}/{state.get('max_iterations', 5)}"
+    # A new pending marker (written by a Stop after the last round finished)
+    # outranks the previous round's done/idle state.
+    pending = c.read_json(os.path.join(d, "pending.json"), {})
+    if pending.get("status") == "pending":
+        return "review-loop: pending review"
     if state.get("done"):
         return f"review-loop: idle (iteration {it})"
     fb_path = os.path.join(d, "codex-feedback.md")
@@ -25,8 +30,6 @@ def status_line(root):
         fresh = (not reviewed_fp) or reviewed_fp == c.cheap_worktree_fp(root)
         return ("review-loop: fresh Codex feedback available" if fresh
                 else "review-loop: stale Codex feedback present")
-    if os.path.exists(os.path.join(d, "pending.json")):
-        return "review-loop: pending review"
     return f"review-loop: active (iteration {it})"
 
 

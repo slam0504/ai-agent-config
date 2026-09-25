@@ -25,8 +25,13 @@ def build_packet(root):
         with open(cp) as f:
             parts.append("## Current Goal / Checkpoint\n\n" + f.read())
     parts.append("## git status --short\n\n```\n" + c.run_git(root, ["status", "--short"])[1] + "\n```")
-    parts.append("## git diff --stat\n\n```\n" + c.run_git(root, ["diff", "--stat", "HEAD"])[1] + "\n```")
-    parts.append("## git diff (full)\n\n```diff\n" + c.run_git(root, ["diff", "HEAD"])[1] + "\n```")
+    # Staged and unstaged shown separately: `git diff HEAD` alone hides a
+    # change that is staged but reverted in the worktree, while the
+    # fingerprint (which includes the cached diff) still counts it.
+    parts.append("## git diff --cached --stat (staged)\n\n```\n" + c.run_git(root, ["diff", "--cached", "--stat", "HEAD"])[1] + "\n```")
+    parts.append("## git diff --stat (unstaged)\n\n```\n" + c.run_git(root, ["diff", "--stat"])[1] + "\n```")
+    parts.append("## git diff --cached (staged, full)\n\n```diff\n" + c.run_git(root, ["diff", "--cached", "HEAD"])[1] + "\n```")
+    parts.append("## git diff (unstaged, full)\n\n```diff\n" + c.run_git(root, ["diff"])[1] + "\n```")
     untracked = c.untracked_files(root)
     if untracked:
         sections = []
