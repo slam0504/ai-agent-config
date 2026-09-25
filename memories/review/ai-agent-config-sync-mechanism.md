@@ -1,11 +1,12 @@
 ---
-status: approved
+status: review
 scope: global
 applies_to: both
 confidence: verified
 verified_on: 2026-09-25
 source: distill
-reviewed_by: slam0504
+reviewed_by:
+supersedes: memories/approved/ai-agent-config-sync-mechanism.md
 ---
 
 # ai-agent-config 是跨機器 / 跨工具的 agent 設定與 memory 同步機制
