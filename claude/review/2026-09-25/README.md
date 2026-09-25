@@ -113,6 +113,10 @@ hooks 測試 38 個、合併測試 20 個全過；對本機 settings 副本預�
 
 hooks 測試 42 個、合併測試 22 個全過；對本機 settings 副本預演仍為逐位元不變。
 
+## 本機安裝（2026-09-25 17:58）
+
+Codex 第十一輪 APPROVE 後執行 `./install.sh`：無 DRIFT；15 個 hook 檔、3 個 agent、gemini-bridge、commit-ready 全部落地，`settings.json` 回報 unchanged 且逐位元相同；`tests/` 未安裝，本機獨有的 `.wrapper-error.log` 與 `.bak-*` 保留；agents 內無殘留 `/Users/example`。安裝後以本機 hooks 重跑 42 個測試全過，並實際對含 2 MB 未追蹤檔與中文檔名的暫存 repo 觸發 Stop 與 SessionStart hook，回報 pending review 並標示 1 個檔案未完整檢查。舊版備份：`~/.ai-agent-config-backup/20260925-175822/`。真實新機器安裝仍未驗證。
+
 ## 驗證
 
 - 兩個 JSON 候選檔可被 `json.load` 解析。
