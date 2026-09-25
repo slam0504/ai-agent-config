@@ -6,6 +6,7 @@ exactly how install.sh calls it.
 """
 import json
 import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -209,28 +210,62 @@ class MergeSettingsTest(unittest.TestCase):
             [{"matcher": "", "hooks": [{"type": "command", "command": "cleanup"}]}],
         )
 
-    def test_hooks_matcher_empty_string_and_missing_are_distinct(self):
+    def test_hooks_omitted_empty_and_star_matchers_are_equivalent(self):
+        """Per the Claude Code hooks docs, an omitted matcher, "" and "*" all
+        mean "match everything" and must be treated as the same matcher — a
+        repo command already present under any of these three spellings must
+        not be duplicated, and a new repo command joins the existing group
+        rather than starting a second one."""
         self.write_dest(
             {
                 "hooks": {
                     "PreToolUse": [
-                        {"matcher": "", "hooks": [{"type": "command", "command": "local-empty-matcher"}]}
+                        {"matcher": "", "hooks": [{"type": "command", "command": "shared-cmd"}]}
                     ]
                 }
             }
         )
         repo_settings = {
             "hooks": {
-                "PreToolUse": [{"hooks": [{"type": "command", "command": "repo-no-matcher"}]}]
+                "PreToolUse": [
+                    {
+                        "hooks": [
+                            {"type": "command", "command": "shared-cmd"},
+                            {"type": "command", "command": "new-cmd"},
+                        ]
+                    }
+                ]
             }
         }
         proc = run_merge(repo_settings, self.dest, self.backup_dir)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         merged = self.read_dest()
         groups = merged["hooks"]["PreToolUse"]
-        self.assertEqual(len(groups), 2)
-        self.assertEqual(sum(1 for g in groups if "matcher" in g), 1)
-        self.assertEqual(sum(1 for g in groups if "matcher" not in g), 1)
+        self.assertEqual(len(groups), 1, "omitted/''/'*' matchers must merge into one group")
+        self.assertEqual(groups[0]["matcher"], "", "local matcher text must not be rewritten")
+        commands = [h["command"] for h in groups[0]["hooks"]]
+        self.assertEqual(commands, ["shared-cmd", "new-cmd"])
+
+    def test_hooks_star_matcher_equivalent_to_omitted(self):
+        self.write_dest(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {"matcher": "*", "hooks": [{"type": "command", "command": "star-cmd"}]}
+                    ]
+                }
+            }
+        )
+        repo_settings = {
+            "hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "star-cmd"}]}]}
+        }
+        proc = run_merge(repo_settings, self.dest, self.backup_dir)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("settings unchanged", proc.stdout)
+        merged = self.read_dest()
+        groups = merged["hooks"]["PreToolUse"]
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0]["matcher"], "*")
 
     def test_hooks_path_form_equivalent_command_not_duplicated(self):
         """Regression: a local command using an absolute $HOME expansion must
@@ -301,16 +336,28 @@ class MergeSettingsTest(unittest.TestCase):
         self.assertIn("settings unchanged", proc2.stdout)
 
     def test_real_shape_multi_group_hooks_report_unchanged(self):
-        """Mirrors the real ~/.claude/settings.json shape that exposed the bug:
-        SessionStart with three matcher-less groups plus one matcher: ""
-        group, and Stop with a local-only Telegram group alongside a group
-        that already has the repo's command under an absolute path."""
+        """Mirrors the real ~/.claude/settings.json shape that exposed the
+        bugs: SessionStart with a mix of omitted/""/"*" matchers across its
+        groups (all equivalent per the hooks docs), and Stop with a
+        local-only Telegram group alongside a group that already has the
+        repo's command under an absolute path."""
         repo_path = os.path.join(REPO_DIR, "claude", "settings.json")
         with open(repo_path, encoding="utf-8") as f:
             repo_settings = json.load(f)
 
         home = "/Users/testhome"
         local = substitute_home_in_json(repo_settings, home)
+        # Mix up the SessionStart matcher spellings: the repo has one
+        # matcher: "" group (serena) and three omitted-matcher groups; make
+        # one of those omitted ones "*" instead, so local ends up with a
+        # genuine mix of omitted / "" / "*" that must still all be treated
+        # as the same matcher.
+        for group in local["hooks"]["SessionStart"]:
+            if any(
+                "sessionstart-restore.sh" in entry.get("command", "")
+                for entry in group.get("hooks", [])
+            ):
+                group["matcher"] = "*"
         local["hooks"]["Stop"].insert(
             0,
             {
@@ -390,6 +437,62 @@ class MergeSettingsTest(unittest.TestCase):
         self.assertEqual(merged["language"], "繁體中文")
         self.assertEqual(merged["permissions"]["defaultMode"], "auto")
         self.assertIn("SessionStart", merged["hooks"])
+
+
+class MergeSettingsFilePermissionsTest(unittest.TestCase):
+    """M1: the merge must never loosen settings.json's permissions — a
+    locked-down dest (and its backup) must keep its original mode, and a
+    freshly created dest must default to 0600 rather than whatever the
+    umask would otherwise produce."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.dest = os.path.join(self.tmp.name, "settings.json")
+        self.backup_dir = os.path.join(self.tmp.name, "backup")
+        self.repo_settings = {"language": "繁體中文"}
+        # Deterministic: a permissive umask would otherwise mask the bug.
+        self.old_umask = os.umask(0o022)
+
+    def tearDown(self):
+        os.umask(self.old_umask)
+
+    @staticmethod
+    def _mode(path):
+        return stat.S_IMODE(os.stat(path).st_mode)
+
+    def _backup_path(self):
+        # dest lives under a tmp dir outside $HOME, so backup_path_for falls
+        # back to backup_dir/<basename>.
+        return os.path.join(self.backup_dir, os.path.basename(self.dest))
+
+    def test_dest_0600_stays_0600_and_backup_is_0600(self):
+        with open(self.dest, "w", encoding="utf-8") as f:
+            json.dump({"language": "English"}, f)
+        os.chmod(self.dest, 0o600)
+
+        proc = run_merge(self.repo_settings, self.dest, self.backup_dir)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(self._mode(self.dest), 0o600)
+        backup_dest = self._backup_path()
+        self.assertTrue(os.path.isfile(backup_dest))
+        self.assertEqual(self._mode(backup_dest), 0o600)
+
+    def test_dest_0644_stays_0644(self):
+        with open(self.dest, "w", encoding="utf-8") as f:
+            json.dump({"language": "English"}, f)
+        os.chmod(self.dest, 0o644)
+
+        proc = run_merge(self.repo_settings, self.dest, self.backup_dir)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(self._mode(self.dest), 0o644)
+        self.assertEqual(self._mode(self._backup_path()), 0o644)
+
+    def test_missing_dest_created_0600(self):
+        self.assertFalse(os.path.exists(self.dest))
+        proc = run_merge(self.repo_settings, self.dest, self.backup_dir)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(self._mode(self.dest), 0o600)
 
 
 if __name__ == "__main__":

@@ -34,14 +34,21 @@ def build_packet(root):
     parts.append("## git diff (unstaged, full)\n\n```diff\n" + c.run_git(root, ["diff"])[1] + "\n```")
     untracked = c.untracked_files(root)
     if untracked:
-        status = c.untracked_status(root)
-        skip = set(status["over_limit"]) | set(status["unread"])
+        # Reuse the same bounded scan's bytes for embedding instead of a
+        # second, unbounded open()+read() per file — that second read would
+        # reopen the TOCTOU gap the bounded scan closes (a file that grows
+        # between the two reads would get fully embedded despite being over
+        # limit; see review_loop_common.untracked_content()).
+        status, contents = c.untracked_content(root)
+        skip = set(status["over_limit"]) | set(status["unread"]) | set(status["unreadable"])
         if not status["complete"]:
             file_limit, total_limit = c.current_untracked_limits()
             lines = [f"- {rel}: over per-file limit ({file_limit} bytes)"
                      for rel in status["over_limit"]]
             lines += [f"- {rel}: unread (total limit {total_limit} bytes exceeded)"
                       for rel in status["unread"]]
+            lines += [f"- {rel}: unreadable (see review-loop log)"
+                      for rel in status["unreadable"]]
             parts.insert(0, "## REVIEW INCOMPLETE: untracked content over limit\n\n"
                              f"Per-file limit: {file_limit} bytes; total limit: {total_limit} bytes. "
                              "Content below does not cover these untracked files:\n\n"
@@ -50,11 +57,8 @@ def build_packet(root):
         for rel in sorted(untracked):
             if rel in skip:
                 continue
-            try:
-                with open(os.path.join(root, rel), errors="replace") as f:
-                    content = f.read()
-            except OSError:
-                content = f"<unreadable: {rel}>"
+            data = contents.get(rel)
+            content = data.decode("utf-8", "replace") if data is not None else f"<unreadable: {rel}>"
             sections.append(f"### {rel}\n\n```\n{content}\n```")
         if sections:
             parts.append("## Untracked files (full content)\n\n" + "\n\n".join(sections))
@@ -79,13 +83,20 @@ def cmd_prepare(root):
     # Compute the fingerprint right when the packet is built, and persist it
     # next to the packet — pending.json can be overwritten by a later Stop
     # before this review is finalized, so it is not a safe source of truth
-    # for "which tree did this packet describe".
-    fp = c.cheap_worktree_fp(root)
+    # for "which tree did this packet describe". fp and completeness status
+    # come from the same scan (cheap_worktree_fp_and_status) — two separate
+    # calls could observe a different tree and disagree about what the fp
+    # covers, which would let an incomplete packet's fp look "complete".
+    fp, status = c.cheap_worktree_fp_and_status(root)
     c.atomic_write(path, build_packet(root))
     c.write_json(meta_path, {
         "cheap_worktree_fp": fp,
         "base_sha": c.base_sha(root),
         "created_at": c.now_iso(),
+        "complete": status["complete"],
+        "over_limit": status["over_limit"],
+        "unread": status["unread"],
+        "unreadable": status["unreadable"],
     })
     print(path)
     return 0
@@ -107,6 +118,29 @@ def cmd_finalize(root, raw_path, verdict, new_findings):
     reviewed_fp = meta["cheap_worktree_fp"]
     review_base_sha = meta.get("base_sha", "none")
 
+    # "complete" is only present in metadata written by the fixed cmd_prepare
+    # above; older metadata (or metadata hand-crafted without the key) has no
+    # such field. Treat that as incomplete-unknown rather than assuming the
+    # packet was complete — fail closed. A packet whose untracked content
+    # wasn't fully read must never be finalized as a passing review: nothing
+    # after this point would notice, because an over-limit file's fp doesn't
+    # change on a same-size content edit, so the tree would never re-enqueue
+    # and SessionStart would report idle forever.
+    complete = meta.get("complete")
+    incomplete = complete is not True
+    if incomplete and verdict == "pass":
+        if complete is None:
+            print(f"review-loop: iteration {n} packet metadata predates the "
+                  "untracked-content completeness check (no 'complete' key); "
+                  "re-run 'prepare' before finalizing with verdict=pass",
+                  file=sys.stderr)
+        else:
+            named = meta.get("over_limit", []) + meta.get("unread", []) + meta.get("unreadable", [])
+            print(f"review-loop: iteration {n} packet was INCOMPLETE (untracked "
+                  f"content not fully read: {', '.join(named) or 'unknown files'}); "
+                  "cannot finalize with verdict=pass", file=sys.stderr)
+        return 1
+
     with open(raw_path) as f:
         body = f.read().strip()
     packet_content = ""
@@ -116,20 +150,29 @@ def cmd_finalize(root, raw_path, verdict, new_findings):
             packet_content = f.read()
     pending_path = os.path.join(c.rl_dir(root), "pending.json")
     pending = c.read_json(pending_path, {})
-    header = ("---\n"
-              f"review_base_sha: {review_base_sha}\n"
-              f"reviewed_worktree_fp: {reviewed_fp}\n"
-              f"review_packet_hash: {c.sha12(packet_content)}\n"
-              f"iteration: {n}\n"
-              f"verdict: {verdict}\n"
-              f"new_findings: {'true' if new_findings else 'false'}\n"
-              f"created_at: {c.now_iso()}\n"
-              "---\n\n")
+    header_lines = [
+        "---",
+        f"review_base_sha: {review_base_sha}",
+        f"reviewed_worktree_fp: {reviewed_fp}",
+        f"review_packet_hash: {c.sha12(packet_content)}",
+        f"iteration: {n}",
+        f"verdict: {verdict}",
+        f"new_findings: {'true' if new_findings else 'false'}",
+    ]
+    if incomplete:
+        header_lines.append("review_incomplete: true")
+    header_lines.append(f"created_at: {c.now_iso()}")
+    header = "\n".join(header_lines) + "\n---\n\n"
     feedback = header + body + "\n"
     c.atomic_write(_feedback_archive(root, n), feedback)
     c.atomic_write(os.path.join(c.rl_dir(root), "codex-feedback.md"), feedback)
 
     done = (verdict == "pass") or (n >= state.get("max_iterations", 5)) or (not new_findings)
+    # An incomplete review must never close the loop: the untracked content
+    # it couldn't read was never actually reviewed, so the round can't be
+    # done regardless of iteration count or new_findings.
+    if incomplete:
+        done = False
     state.update({"iteration": n, "last_verdict": verdict, "done": done})
     c.write_state(root, state)
 
@@ -141,7 +184,7 @@ def cmd_finalize(root, raw_path, verdict, new_findings):
         c.write_json(pending_path, pending)
     else:
         c.log(root, f"finalize iter={n}: pending.json describes a newer tree; left pending")
-    c.log(root, f"finalize iter={n} verdict={verdict} done={done}")
+    c.log(root, f"finalize iter={n} verdict={verdict} done={done} incomplete={incomplete}")
     print(f"review-loop: finalized iteration {n} (verdict={verdict}, done={done})")
     return 0
 

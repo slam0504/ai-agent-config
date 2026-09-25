@@ -29,8 +29,9 @@ def status_line(root):
             header = {}
         reviewed_fp = header.get("reviewed_worktree_fp", "")
         fresh = (not reviewed_fp) or reviewed_fp == c.cheap_worktree_fp(root)
+        incomplete_note = " (incomplete review)" if header.get("review_incomplete") == "true" else ""
         return ("review-loop: fresh Codex feedback available" if fresh
-                else "review-loop: stale Codex feedback present") + suffix
+                else "review-loop: stale Codex feedback present") + incomplete_note + suffix
     return f"review-loop: active (iteration {it})" + suffix
 
 

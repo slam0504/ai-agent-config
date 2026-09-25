@@ -18,30 +18,43 @@ Merge rules (see claude/review/2026-09-25/README.md for the design discussion):
   set (currently just "defaultMode"); every other local key (allow, deny,
   ask, additionalDirectories, ...) is left untouched.
 - "hooks": for each event/group in the repo, look at every local group for
-  that event with the same matcher (a missing matcher and "" are distinct;
-  there can be more than one such group locally). A repo command already
-  present — in path-normalised form — in any of those groups is not added
-  again. Anything genuinely new is appended to the first such group (or the
-  whole repo group is appended if no local group with that matcher exists).
-  Local-only events/groups/commands are never touched, removed, or reordered.
+  that event with an equivalent matcher (per the Claude Code hooks docs, an
+  omitted matcher, "" and "*" all mean "match everything" and are treated as
+  the same matcher; any other string compares by exact value; there can be
+  more than one such group locally). A repo command already present — in
+  path-normalised form — in any of those groups is not added again.
+  Anything genuinely new is appended to the first such group (or the whole
+  repo group is appended if no local group with an equivalent matcher
+  exists). Local-only events/groups/commands are never touched, removed, or
+  reordered, and a local group's matcher text is never rewritten.
 - Any local top-level key absent from the repo file (e.g. "env") is kept.
+
+File permissions: the destination keeps its original mode (a 0600
+settings.json stays 0600); a new file is created 0600. The backup copy is
+written with the same mode as the original dest.
 """
 import copy
 import json
 import os
 import re
 import sys
+import tempfile
 
 _MISSING = object()
 _WHITESPACE_RE = re.compile(r"\s+")
 
 
 def matcher_key(group):
-    """Return a hashable/comparable key for a hook group's matcher, treating
-    a missing matcher and an empty-string matcher as distinct values."""
-    if "matcher" not in group:
-        return (False, None)
-    return (True, group["matcher"])
+    """Return a canonical, hashable key for a hook group's matcher. Per the
+    Claude Code hooks docs, an omitted matcher, "" and "*" all mean "match
+    everything" and are treated as equivalent; any other string matcher
+    compares by exact value. The group's own matcher text is never rewritten
+    — this key is only used to decide which local group(s) a repo group's
+    commands should be compared/appended against."""
+    matcher = group.get("matcher")
+    if matcher in (None, "", "*"):
+        return None
+    return matcher
 
 
 def normalize_command(command):
@@ -174,19 +187,32 @@ def main(argv):
         return 0
 
     if dest_existed:
+        # Preserve the original file's permissions (settings.json may be
+        # locked down, e.g. 0600, and may contain sensitive env values) —
+        # neither the backup nor the rewritten dest should end up looser.
+        orig_mode = os.stat(dest_path).st_mode & 0o777
         backup_dest = backup_path_for(dest_abs, backup_dir)
-        os.makedirs(os.path.dirname(backup_dest), exist_ok=True)
-        with open(dest_path, "r", encoding="utf-8") as f:
-            existing_bytes = f.read()
+        os.makedirs(os.path.dirname(backup_dest), exist_ok=True, mode=0o700)
         with open(backup_dest, "w", encoding="utf-8") as f:
-            f.write(existing_bytes)
+            f.write(original_text)
+        os.chmod(backup_dest, orig_mode)
+    else:
+        # New file: default to a locked-down mode rather than whatever the
+        # umask would otherwise produce.
+        orig_mode = 0o600
 
-    os.makedirs(os.path.dirname(dest_abs) or ".", exist_ok=True)
-    tmp_path = dest_abs + ".tmp"
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        json.dump(merged, f, indent=2, ensure_ascii=False)
-        f.write("\n")
-    os.replace(tmp_path, dest_abs)
+    dest_dir = os.path.dirname(dest_abs) or "."
+    os.makedirs(dest_dir, exist_ok=True)
+    tmp_fd, tmp_path = tempfile.mkstemp(dir=dest_dir, prefix=".settings-merge-")
+    try:
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+            json.dump(merged, f, indent=2, ensure_ascii=False)
+            f.write("\n")
+        os.chmod(tmp_path, orig_mode)
+        os.replace(tmp_path, dest_abs)
+    except BaseException:
+        os.unlink(tmp_path)
+        raise
 
     print(f"merged settings into {dest_path} (changed: {', '.join(changed)})")
     return 0

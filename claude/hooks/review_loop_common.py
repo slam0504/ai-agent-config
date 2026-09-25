@@ -138,24 +138,47 @@ def current_untracked_limits():
     )
 
 
-def _untracked_scan(root):
-    """One pass over untracked files producing both fp parts and a status dict.
+def _untracked_scan(root, collect_content=False):
+    """One pass over untracked files producing fp parts, a status dict, and
+    (when collect_content) the raw bytes of every fully-read file.
 
-    Iterates paths in sorted order for determinism. A file over the per-file
-    limit is not read; it contributes "{rel}:<over-limit:{size}>" (size from
-    os.stat) so the fingerprint still reacts to a rename but not to a content
-    edit that doesn't change size. Once the running total of bytes actually
-    read would exceed the total limit, no further files are read: each
-    remaining path contributes just its (unhashed) name — so a path change
-    still alters the fingerprint — followed by one final summary part.
+    Iterates paths in sorted order for determinism. Never trusts os.stat for
+    sizing (a file can grow between stat and read — TOCTOU): every file is
+    opened and read with an explicit bound, `read(cap + 1)`, where `cap` is
+    whatever's left of both the per-file limit and the remaining total
+    budget. Reading one byte past `cap` is enough to prove the file doesn't
+    fit without ever reading (or hashing) more than that.
 
-    Returns (parts, status) where status is
-    {"complete": bool, "over_limit": [rel, ...], "unread": [rel, ...]}.
+    A file whose bounded read comes back bigger than the per-file limit is
+    over-limit and not hashed; it contributes "{rel}:<over-limit:{file_limit}>"
+    (the limit, not a discovered size — the whole point is that we never
+    learn or trust the true size) so the fingerprint still reacts to a
+    rename but not to a content edit that stays over the same limit. A file
+    that fits the per-file limit but would push the cumulative read past the
+    total limit is left unread instead, and once that happens no further
+    files are read: each remaining path (including the one that tipped the
+    total) contributes just its (unhashed) name — so a path change still
+    alters the fingerprint — followed by one final summary part. A read that
+    fails outright (permissions, races, ...) is recorded as unreadable.
+
+    collect_content=True additionally returns the exact bytes read for every
+    fully-read file, keyed by rel path — so a second consumer (the review
+    packet, which needs the actual content, not just a hash) can reuse this
+    pass's bytes instead of re-opening the file with an unbounded read,
+    which would reopen the same TOCTOU gap this function closes.
+
+    Returns (parts, status, contents). status is
+    {"complete": bool, "over_limit": [rel, ...], "unread": [rel, ...],
+     "unreadable": [rel, ...]}. contents is {} unless collect_content is
+    True, in which case it maps rel -> bytes for every file included in a
+    "{rel}:sha256" part (i.e. every file NOT in over_limit/unread/unreadable).
     """
     file_limit, total_limit = current_untracked_limits()
     parts = []
     over_limit = []
     unread = []
+    unreadable = []
+    contents = {}
     total_read = 0
     stopped = False
     for rel in sorted(untracked_files(root)):
@@ -163,37 +186,38 @@ def _untracked_scan(root):
             unread.append(rel)
             parts.append(rel)
             continue
+        remaining_total = total_limit - total_read
+        cap = min(file_limit, max(remaining_total, 0))
         path = os.path.join(root, rel)
         try:
-            size = os.stat(path).st_size
+            with open(path, "rb") as f:
+                data = f.read(cap + 1)
         except OSError:
+            unreadable.append(rel)
             parts.append(f"{rel}:<unreadable: {rel}>")
             continue
-        if size > file_limit:
+        if len(data) > file_limit:
             over_limit.append(rel)
-            parts.append(f"{rel}:<over-limit:{size}>")
+            parts.append(f"{rel}:<over-limit:{file_limit}>")
             continue
-        if total_read + size > total_limit:
+        if len(data) > remaining_total:
             stopped = True
             unread.append(rel)
             parts.append(rel)
             continue
-        try:
-            with open(path, "rb") as f:
-                data = f.read()
-        except OSError:
-            parts.append(f"{rel}:<unreadable: {rel}>")
-            continue
         total_read += len(data)
         parts.append(f"{rel}:{hashlib.sha256(data).hexdigest()}")
+        if collect_content:
+            contents[rel] = data
     if stopped:
         parts.append(f"<total-over-limit:{len(unread)} files unread>")
     status = {
-        "complete": not over_limit and not unread,
+        "complete": not (over_limit or unread or unreadable),
         "over_limit": over_limit,
         "unread": unread,
+        "unreadable": unreadable,
     }
-    return parts, status
+    return parts, status, contents
 
 
 def untracked_fp_parts(root):
@@ -205,28 +229,51 @@ def untracked_fp_parts(root):
     treated as empty. Files over UNTRACKED_FILE_LIMIT_BYTES, or beyond
     UNTRACKED_TOTAL_LIMIT_BYTES cumulative, are not read — see _untracked_scan.
     """
-    parts, _ = _untracked_scan(root)
+    parts, _, _ = _untracked_scan(root)
     return parts
 
 
 def untracked_status(root):
-    """{"complete", "over_limit", "unread"} for the untracked-file content cap.
+    """{"complete", "over_limit", "unread", "unreadable"} for the untracked-file
+    content cap.
 
     Computed by the same rules as untracked_fp_parts() (shared _untracked_scan
     pass), so callers can tell whether a review actually covered every
-    untracked file's content.
+    untracked file's content. "complete" is False whenever any file was
+    skipped for any reason (over the per-file limit, past the total budget,
+    or unreadable) — a caller must not treat the review as full coverage
+    unless "complete" is True.
     """
-    _, status = _untracked_scan(root)
+    _, status, _ = _untracked_scan(root)
     return status
 
 
+def untracked_content(root):
+    """(status, contents) from one bounded scan; contents maps rel -> bytes
+    for every file that was fully read under the caps (the same files
+    untracked_status() would NOT list in over_limit/unread/unreadable).
+
+    Build the review packet's embedded content from this, not from a second
+    unbounded open()+read() of each file — re-reading without a bound would
+    reopen the TOCTOU gap _untracked_scan's bounded read closes (a file that
+    grows between the status scan and a later full read would get fully
+    embedded even though it's over limit).
+    """
+    _, status, contents = _untracked_scan(root, collect_content=True)
+    return status, contents
+
+
 def untracked_incomplete_suffix(root):
-    """" (untracked content over limit: N files unread)" or "" when complete."""
+    """" (untracked content over limit: N files not fully checked)", or ""
+    when untracked_status() reports complete. N counts over-limit, unread,
+    and unreadable files together — all three mean the check didn't see that
+    file's full content.
+    """
     status = untracked_status(root)
     if status["complete"]:
         return ""
-    n = len(status["over_limit"]) + len(status["unread"])
-    return f" (untracked content over limit: {n} files unread)"
+    n = len(status["over_limit"]) + len(status["unread"]) + len(status["unreadable"])
+    return f" (untracked content over limit: {n} files not fully checked)"
 
 
 def tree_dirty(root):
@@ -241,14 +288,28 @@ def base_sha(root):
     return out.strip() if rc == 0 and out.strip() else "none"
 
 
-def cheap_worktree_fp(root):
+def cheap_worktree_fp_and_status(root):
+    """(fp, status) from a single untracked-file scan.
+
+    A caller that needs to know whether the fp it just captured actually
+    covers every untracked file's content (e.g. reviewer.cmd_prepare, which
+    persists both into packet metadata) must get them from the same scan —
+    two separate calls to untracked_fp_parts()/untracked_status() could in
+    principle observe a different tree (a file edited in between) and
+    disagree about what the fp describes.
+    """
+    untracked_parts, status, _ = _untracked_scan(root)
     parts = [
         base_sha(root),
         run_git(root, ["diff", "HEAD", "--", ".", ":!.agent"])[1],
         run_git(root, ["diff", "--cached", "HEAD", "--", ".", ":!.agent"])[1],
-        "\n".join(untracked_fp_parts(root)),
+        "\n".join(untracked_parts),
     ]
-    return sha12("\n".join(parts))
+    return sha12("\n".join(parts)), status
+
+
+def cheap_worktree_fp(root):
+    return cheap_worktree_fp_and_status(root)[0]
 
 
 STATE_DEFAULTS = {

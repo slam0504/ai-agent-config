@@ -91,6 +91,18 @@ Codex 第四輪（審核範圍 `13c059a..02c4912`）再重現兩項 hook 正確�
 
 剩餘風險：P1 的指紋現在會讀取所有未追蹤檔內容，若專案沒有 `.gitignore` 且有大量未追蹤檔（例如 `node_modules/`），Stop hook 的成本會明顯上升；原版以行數計算所以便宜。Codex 建議不要改用大小與 mtime（會再漏掉內容變更），而是設容量上限、超限時明確標為未完成審查。本次未實作，列為後續項目。
 
+## Codex 第九輪（審核範圍 `6a9515d..d39ac00`）的修正
+
+| 編號 | 問題 | 修正 |
+|---|---|---|
+| P1 | 封包標 REVIEW INCOMPLETE 仍可 finalize 為 pass，之後超限檔改成同大小新內容不會重新排審 | `prepare` 把完整性狀態（`complete`、`over_limit`、`unread`、`unreadable`）寫進 packet metadata，與指紋同一次掃描產生；`finalize` 對不完整或缺 `complete` 欄位的封包拒絕 pass，其他 verdict 在 header 標 `review_incomplete: true` 且 `done` 強制為 False；狀態列與回饋注入加註「(incomplete review)」 |
+| P2 | 讀檔或 stat 失敗仍回報 complete=true | 新增 `unreadable` 清單，任何讀取失敗都讓完整性不成立並列入封包 INCOMPLETE 段 |
+| P2 | 上限只看 stat，讀取本身無上限，檔案在檢查後增長仍被完整雜湊 | 移除 stat 預檢，改為 `read(cap + 1)` 有界讀取，超出即判超限或超總量；封包重讀改用同一次有界掃描的內容，不再無上限 `open().read()` |
+| P2 | `merge-settings.py` 更新與備份放寬檔案權限 | 保留 dest 原權限套用到新檔與備份，dest 不存在時以 0600 建立，備份目錄 0700 |
+| P2 | 省略 matcher 與 `""` 被視為不同，同一命令重複登錄 | 依官方語意把省略、`""`、`"*"` 正規化為同一 key 再去重，本機 matcher 文字不改寫 |
+
+hooks 測試 38 個、合併測試 20 個全過；對本機 settings 副本預演仍為逐位元不變。已知殘留：`build_packet` 列出未追蹤檔與有界掃描是兩次 git 呼叫，期間新增的檔案會被標為 unreadable 而非內容，屬 fail-closed。
+
 ## 驗證
 
 - 兩個 JSON 候選檔可被 `json.load` 解析。

@@ -166,7 +166,7 @@ class TestSessionStartStatusSuffix(_RepoCase):
     def test_status_line_carries_over_limit_suffix(self):
         write_bytes(self.repo, "big.txt", b"A" * 150)
         line = sessionstart_status.status_line(self.repo)
-        self.assertIn("(untracked content over limit: 1 files unread)", line)
+        self.assertIn("(untracked content over limit: 1 files not fully checked)", line)
         self.assertEqual(len(line.splitlines()), 1, "status line must stay a single line")
 
     def test_status_line_has_no_suffix_when_under_limits(self):
