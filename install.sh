@@ -16,16 +16,21 @@ for arg in "$@"; do
 done
 skipped=""
 
+# mode (3rd arg): "guard" (default) applies the drift guard; "overwrite" exempts
+# the dst from the guard — use it for repo-authoritative targets the machine
+# should never hand-edit (e.g. memories/approved/), to avoid needing --force on
+# every routine update.
 copy_with_backup() {
   src="$1"
   dst="$2"
+  mode="${3:-guard}"
 
   if [ ! -f "$src" ]; then
     echo "missing source: $src" >&2
     exit 1
   fi
 
-  if [ -e "$dst" ] && [ "$force" -eq 0 ] && ! diff -q "$src" "$dst" >/dev/null 2>&1; then
+  if [ "$mode" = "guard" ] && [ -e "$dst" ] && [ "$force" -eq 0 ] && ! diff -q "$src" "$dst" >/dev/null 2>&1; then
     echo "DRIFT: $dst differs from repo source; skipped (re-run with --force)" >&2
     skipped="$skipped $dst"
     return 0
@@ -123,6 +128,37 @@ copy_dir_with_backup "$repo_dir/codex/skills/distill" "$HOME/.agents/skills/dist
 copy_dir_with_backup "$repo_dir/memories/approved" "$HOME/.codex/docs/memories/approved" overwrite
 copy_dir_with_backup "$repo_dir/claude/skills/distill" "$HOME/.claude/skills/distill"
 copy_dir_with_backup "$repo_dir/memories/approved" "$HOME/.claude/docs/memories/approved" overwrite
+
+# Claude hooks, agents, scripts and the commit-ready skill are repo-authoritative
+# (edit repo -> review -> install), so they use overwrite semantics like
+# memories/approved/ rather than the drift guard.
+
+# Hooks: installed per file so machine-local files (e.g. .wrapper-error.log,
+# old .bak-* files) are left alone. tests/ is a dev-only fixture and is never
+# installed.
+for f in "$repo_dir"/claude/hooks/*.py "$repo_dir"/claude/hooks/*.sh; do
+  [ -e "$f" ] || continue
+  copy_with_backup "$f" "$HOME/.claude/hooks/$(basename "$f")" overwrite
+done
+
+# Agents: code-inspector.md and devcontainer-test-runner.md hard-code the
+# agent-memory path under the placeholder /Users/example — substitute the
+# real $HOME before installing.
+home_for_sed=$(printf '%s' "$HOME" | sed 's/[&\]/\\&/g')
+for f in "$repo_dir"/claude/agents/*.md; do
+  [ -e "$f" ] || continue
+  tmp=$(mktemp)
+  sed "s#/Users/example#$home_for_sed#g" "$f" > "$tmp"
+  copy_with_backup "$tmp" "$HOME/.claude/agents/$(basename "$f")" overwrite
+  rm -f "$tmp"
+done
+
+copy_with_backup "$repo_dir/claude/scripts/gemini-bridge.sh" "$HOME/.claude/scripts/gemini-bridge.sh" overwrite
+copy_dir_with_backup "$repo_dir/claude/skills/commit-ready" "$HOME/.claude/skills/commit-ready" overwrite
+
+# Claude settings: merged (not overwritten) into the single user-level
+# settings.json — see claude/merge-settings.py for the merge rules.
+python3 "$repo_dir/claude/merge-settings.py" "$repo_dir/claude/settings.json" "$HOME/.claude/settings.json" "$backup_dir"
 
 if [ -d "${backup_dir%/*}" ] && [ -d "$backup_dir" ]; then
   echo "backup: $backup_dir"

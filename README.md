@@ -9,7 +9,22 @@ Personal AI agent configuration for syncing durable rules and settings across ma
 - `codex/review/`: pending configuration proposals; never installed automatically.
 - `codex/skills/distill/SKILL.md`: Codex `$distill` workflow for reviewed memory candidates.
 - `claude/CLAUDE.md`: global Claude Code collaboration rules.
-- `claude/review/`: pending Claude configuration proposals; never installed automatically. Current: [2026-09-25](claude/review/2026-09-25/README.md).
+- `claude/settings.json`: managed Claude Code settings (permissions.defaultMode,
+  hooks, enabledPlugins, ...); merged into `~/.claude/settings.json` rather than
+  overwriting it, since Claude Code only has one user-level settings file.
+- `claude/settings.local.example.json`: example of machine-local settings
+  (`env.PATH`, `permissions.allow`, machine-specific hooks) that stay out of
+  the synced file; not installed.
+- `claude/hooks/`: Codex review-gate and context-checkpoint hooks, installed
+  per file into `~/.claude/hooks/`.
+- `claude/agents/`: shared subagent definitions, installed into `~/.claude/agents/`.
+- `claude/scripts/`: helper scripts (e.g. `gemini-bridge.sh`) referenced by hooks/agents.
+- `claude/skills/commit-ready/`: pre-commit readiness check skill.
+- `claude/merge-settings.py`: merges `claude/settings.json` into a local `~/.claude/settings.json`.
+- `claude/review/`: Claude configuration review records; not installed
+  automatically once approved candidates have been promoted to the formal
+  locations above (`hooks/`, `agents/`, `scripts/`, `skills/`, `settings.json`).
+  Current: [2026-09-25](claude/review/2026-09-25/README.md) (approved and promoted).
 - `memories/review/`: proposed memory entries that are not loaded by agents.
 - `memories/approved/`: reviewed memory entries that can be synced across machines.
 - `memories/rejected/`: rejected candidates kept only when useful for audit.
@@ -97,6 +112,23 @@ From a clone of this repo:
 
 The script backs up existing destination files before copying.
 
+### Claude settings merge
+
+`~/.claude/settings.json` is a single user-level file, so `install.sh` merges
+`claude/settings.json` into it via `claude/merge-settings.py` instead of
+overwriting it:
+
+- Managed top-level keys (`language`, `effortLevel`, `enabledPlugins`, ...) are
+  set from the repo; dict-valued keys like `enabledPlugins` are unioned so
+  local-only entries survive.
+- `permissions`: only `defaultMode` is set from the repo; `allow`, `deny`,
+  `ask`, `additionalDirectories` and any other local permissions are left
+  untouched.
+- `hooks`: repo hook commands are merged into the matching local group (same
+  event + matcher) or appended as a new group; local-only events, groups and
+  commands (e.g. a Telegram Stop hook) are never removed or reordered.
+- Any other local top-level key (e.g. `env`) is preserved as-is.
+
 ### Codex config
 
 Review record: [2026-09-25 local Codex configuration](codex/review/2026-09-25/README.md) (approved and merged into the template).
@@ -120,5 +152,7 @@ re-run. To overwrite anyway (a backup is still taken):
 
 The guard applies to machine-editable targets (`CLAUDE.md`, `AGENTS.md`,
 `config.toml`). Repo-authoritative targets the machine should never hand-edit —
-`memories/approved/` — are exempt and overwritten directly, so routine memory
-updates don't require `--force`.
+`memories/approved/`, `claude/hooks/`, `claude/agents/`, `claude/scripts/`,
+`claude/skills/commit-ready/` — are exempt and overwritten directly, so
+routine updates don't require `--force`. `claude/settings.json` doesn't use
+the guard either; it goes through the JSON merge described above instead.

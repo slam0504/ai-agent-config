@@ -1,4 +1,13 @@
-# Claude Code 設定整理（待審核）
+# Claude Code 設定整理（審核紀錄）
+
+> **2026-09-25 已核准並落地**：本目錄的候選檔已移到正式位置 —
+> `hooks/` → `claude/hooks/`、`agents/` → `claude/agents/`、
+> `scripts/` → `claude/scripts/`、`skills/commit-ready/` →
+> `claude/skills/commit-ready/`、`settings.json` → `claude/settings.json`、
+> `settings.local.example.json` → `claude/settings.local.example.json`。
+> `install.sh` 現在會安裝這些正式位置的檔案（agents 與 settings 另有處理，
+> 詳見根目錄 `README.md`）。本檔案保留作為當時的審核過程與決策紀錄，
+> 之後不再是安裝來源。
 
 本次將本機 `~/.claude` 的可攜設定整理成候選檔，供人工審核。`install.sh` 不讀取本目錄；正式安裝來源（`claude/CLAUDE.md`、`claude/skills/distill/`）、`install.sh` 與權限規則均未修改，也未執行安裝、commit 或 push。
 
