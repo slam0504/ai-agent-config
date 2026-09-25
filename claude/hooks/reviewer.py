@@ -18,7 +18,16 @@ def _feedback_archive(root, n):
     return os.path.join(c.rl_dir(root), "iterations", f"{n:03d}-feedback.md")
 
 
-def build_packet(root):
+def build_packet(root, snapshot):
+    """snapshot must be a review_loop_common.worktree_snapshot(root) result.
+
+    The untracked-file section is built entirely from that snapshot — no
+    second scan here — so the packet can never disagree with the
+    completeness status a caller (cmd_prepare) derived from the same
+    snapshot. Everything else (checkpoint, tracked-file diffs) is read
+    fresh; those aren't subject to the untracked-content cap this snapshot
+    exists for.
+    """
     parts = []
     cp = os.path.join(root, ".agent", "session-checkpoint.md")
     if os.path.exists(cp):
@@ -32,14 +41,10 @@ def build_packet(root):
     parts.append("## git diff --stat (unstaged)\n\n```\n" + c.run_git(root, ["diff", "--stat"])[1] + "\n```")
     parts.append("## git diff --cached (staged, full)\n\n```diff\n" + c.run_git(root, ["diff", "--cached", "HEAD"])[1] + "\n```")
     parts.append("## git diff (unstaged, full)\n\n```diff\n" + c.run_git(root, ["diff"])[1] + "\n```")
-    untracked = c.untracked_files(root)
+    untracked = snapshot["untracked"]
     if untracked:
-        # Reuse the same bounded scan's bytes for embedding instead of a
-        # second, unbounded open()+read() per file — that second read would
-        # reopen the TOCTOU gap the bounded scan closes (a file that grows
-        # between the two reads would get fully embedded despite being over
-        # limit; see review_loop_common.untracked_content()).
-        status, contents = c.untracked_content(root)
+        status = snapshot["status"]
+        contents = snapshot["contents"]
         skip = set(status["over_limit"]) | set(status["unread"]) | set(status["unreadable"])
         if not status["complete"]:
             file_limit, total_limit = c.current_untracked_limits()
@@ -83,14 +88,19 @@ def cmd_prepare(root):
     # Compute the fingerprint right when the packet is built, and persist it
     # next to the packet — pending.json can be overwritten by a later Stop
     # before this review is finalized, so it is not a safe source of truth
-    # for "which tree did this packet describe". fp and completeness status
-    # come from the same scan (cheap_worktree_fp_and_status) — two separate
-    # calls could observe a different tree and disagree about what the fp
-    # covers, which would let an incomplete packet's fp look "complete".
-    fp, status = c.cheap_worktree_fp_and_status(root)
-    c.atomic_write(path, build_packet(root))
+    # for "which tree did this packet describe". The fp, the completeness
+    # status written to metadata, and the packet body itself all come from
+    # ONE worktree_snapshot() call — a second, independent scan (as this
+    # used to do via build_packet() rescanning) could observe a different
+    # tree if a file changes in between, so the metadata could say
+    # complete=true while the packet it describes actually shows REVIEW
+    # INCOMPLETE (or vice versa), and finalize --verdict pass would trust
+    # the wrong one.
+    snapshot = c.worktree_snapshot(root)
+    status = snapshot["status"]
+    c.atomic_write(path, build_packet(root, snapshot))
     c.write_json(meta_path, {
-        "cheap_worktree_fp": fp,
+        "cheap_worktree_fp": snapshot["fp"],
         "base_sha": c.base_sha(root),
         "created_at": c.now_iso(),
         "complete": status["complete"],

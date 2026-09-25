@@ -67,7 +67,7 @@ class TestOverFileLimit(_RepoCase):
     def test_content_not_embedded_and_incomplete_section_present(self):
         marker = b"MARKER_" + b"Z" * 143  # 150 bytes total, unique-ish
         write_bytes(self.repo, "big.txt", marker)
-        packet = reviewer.build_packet(self.repo)
+        packet = reviewer.build_packet(self.repo, c.worktree_snapshot(self.repo))
         self.assertIn("## REVIEW INCOMPLETE: untracked content over limit", packet)
         self.assertIn("big.txt", packet)
         self.assertNotIn("MARKER_", packet, "over-limit file content must not be embedded")
@@ -118,7 +118,7 @@ class TestTotalLimit(_RepoCase):
         write_bytes(self.repo, "b.txt", b"b" * 100)
         write_bytes(self.repo, "c.txt", b"c" * 100)
 
-        packet = reviewer.build_packet(self.repo)
+        packet = reviewer.build_packet(self.repo, c.worktree_snapshot(self.repo))
         self.assertIn("## REVIEW INCOMPLETE: untracked content over limit", packet)
         self.assertIn("c.txt", packet)
         # a.txt/b.txt were fully read and must still be embedded.
@@ -138,7 +138,7 @@ class TestUnderLimits(_RepoCase):
         self.assertEqual(status["over_limit"], [])
         self.assertEqual(status["unread"], [])
 
-        packet = reviewer.build_packet(self.repo)
+        packet = reviewer.build_packet(self.repo, c.worktree_snapshot(self.repo))
         self.assertNotIn("REVIEW INCOMPLETE", packet)
         self.assertIn("print('hello')", packet)
 

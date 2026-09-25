@@ -166,7 +166,7 @@ class TestUnreadableFileMarksIncomplete(_RepoCase):
         self.assertFalse(status["complete"])
         self.assertIn("secret.bin", status["unreadable"])
 
-        packet = reviewer.build_packet(self.repo)
+        packet = reviewer.build_packet(self.repo, c.worktree_snapshot(self.repo))
         self.assertIn("## REVIEW INCOMPLETE: untracked content over limit", packet)
         self.assertIn("secret.bin", packet)
 

@@ -48,7 +48,7 @@ class TestUntrackedFileTriggersReview(unittest.TestCase):
         with open(os.path.join(self.repo, "new_file.py"), "w") as f:
             f.write(f"# {marker}\n")
 
-        packet = reviewer.build_packet(self.repo)
+        packet = reviewer.build_packet(self.repo, c.worktree_snapshot(self.repo))
 
         self.assertIn(marker, packet, "the review packet must include untracked file content")
 
@@ -80,7 +80,7 @@ class TestUntrackedFingerprintByteAware(unittest.TestCase):
             "(git quotes the path by default; it must not be silently dropped)",
         )
 
-        packet = reviewer.build_packet(self.repo)
+        packet = reviewer.build_packet(self.repo, c.worktree_snapshot(self.repo))
         self.assertIn(fname, packet, "the packet must list the non-ASCII filename")
         self.assertIn("second", packet, "the packet must include the file's actual content")
 

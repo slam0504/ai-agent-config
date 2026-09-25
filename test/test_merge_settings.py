@@ -4,6 +4,7 @@ Invokes the script as a subprocess (its filename has a hyphen, so it isn't a
 plain importable module) against temp repo/dest/backup paths — this mirrors
 exactly how install.sh calls it.
 """
+import importlib.util
 import json
 import os
 import stat
@@ -11,9 +12,22 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPT = os.path.join(REPO_DIR, "claude", "merge-settings.py")
+
+
+def load_merge_module():
+    """Load merge-settings.py as an importable module (its filename has a
+    hyphen, so a plain `import` won't work). Used only by tests that need to
+    call main() in-process to monkeypatch os.fdopen/os.chmod — everything
+    else goes through the subprocess-based run_merge() below, which mirrors
+    how install.sh actually invokes the script."""
+    spec = importlib.util.spec_from_file_location("merge_settings", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def run_merge(repo_settings, dest_path, backup_dir, home=None):
@@ -493,6 +507,69 @@ class MergeSettingsFilePermissionsTest(unittest.TestCase):
         proc = run_merge(self.repo_settings, self.dest, self.backup_dir)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(self._mode(self.dest), 0o600)
+
+    def test_backup_never_briefly_more_permissive_than_original(self):
+        """N1 regression: the backup file must be 0600 from the instant it is
+        created — never sit at the umask-default (0644 under umask 022) even
+        momentarily before being chmod'ed down. Runs main() in-process (via
+        load_merge_module) so os.fdopen/os.chmod can be monkeypatched; a
+        wrapped os.fdopen asserts the fd's mode via os.fstat before any
+        content is written to it."""
+        with open(self.dest, "w", encoding="utf-8") as f:
+            json.dump({"language": "English"}, f)
+        os.chmod(self.dest, 0o644)
+
+        repo_path = os.path.join(self.tmp.name, "repo-settings.json")
+        with open(repo_path, "w", encoding="utf-8") as f:
+            json.dump(self.repo_settings, f)
+
+        modes_at_creation = []
+        chmod_calls = []
+        real_fdopen = os.fdopen
+        real_chmod = os.chmod
+
+        def spy_fdopen(fd, *args, **kwargs):
+            modes_at_creation.append(stat.S_IMODE(os.fstat(fd).st_mode))
+            return real_fdopen(fd, *args, **kwargs)
+
+        def spy_chmod(path, mode, *args, **kwargs):
+            chmod_calls.append((path, mode))
+            return real_chmod(path, mode, *args, **kwargs)
+
+        module = load_merge_module()
+        with mock.patch("os.fdopen", side_effect=spy_fdopen), mock.patch(
+            "os.chmod", side_effect=spy_chmod
+        ):
+            rc = module.main(["merge-settings.py", repo_path, self.dest, self.backup_dir])
+
+        self.assertEqual(rc, 0)
+        # Two files are opened via fdopen: the backup, then the dest temp
+        # file — both must be 0600 the instant they're created, regardless
+        # of the original file's (looser) final mode.
+        self.assertEqual(modes_at_creation, [0o600, 0o600])
+        # Both are then chmod'ed to the original mode (0644) after writing.
+        backup_dest = self._backup_path()
+        self.assertIn((backup_dest, 0o644), chmod_calls)
+        self.assertEqual(self._mode(backup_dest), 0o644)
+        self.assertEqual(self._mode(self.dest), 0o644)
+
+    def test_preexisting_backup_path_fails_loudly_without_touching_dest(self):
+        with open(self.dest, "w", encoding="utf-8") as f:
+            json.dump({"language": "English"}, f)
+        os.chmod(self.dest, 0o600)
+        with open(self.dest, "rb") as f:
+            dest_bytes_before = f.read()
+
+        backup_dest = self._backup_path()
+        os.makedirs(os.path.dirname(backup_dest), exist_ok=True)
+        with open(backup_dest, "w", encoding="utf-8") as f:
+            f.write("stale backup from an earlier run")
+
+        proc = run_merge(self.repo_settings, self.dest, self.backup_dir)
+        self.assertNotEqual(proc.returncode, 0)
+        with open(self.dest, "rb") as f:
+            dest_bytes_after = f.read()
+        self.assertEqual(dest_bytes_before, dest_bytes_after)
 
 
 if __name__ == "__main__":

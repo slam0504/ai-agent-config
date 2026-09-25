@@ -30,8 +30,11 @@ Merge rules (see claude/review/2026-09-25/README.md for the design discussion):
 - Any local top-level key absent from the repo file (e.g. "env") is kept.
 
 File permissions: the destination keeps its original mode (a 0600
-settings.json stays 0600); a new file is created 0600. The backup copy is
-written with the same mode as the original dest.
+settings.json stays 0600); a new file is created 0600. The backup copy ends
+up with the same mode as the original dest, but is created 0600 and only
+relaxed afterwards, so it is never briefly more permissive than the
+original — a pre-existing file at the backup path is treated as an error
+rather than overwritten.
 """
 import copy
 import json
@@ -189,11 +192,17 @@ def main(argv):
     if dest_existed:
         # Preserve the original file's permissions (settings.json may be
         # locked down, e.g. 0600, and may contain sensitive env values) —
-        # neither the backup nor the rewritten dest should end up looser.
+        # neither the backup nor the rewritten dest should end up looser,
+        # not even for the brief window while the backup is being written.
         orig_mode = os.stat(dest_path).st_mode & 0o777
         backup_dest = backup_path_for(dest_abs, backup_dir)
         os.makedirs(os.path.dirname(backup_dest), exist_ok=True, mode=0o700)
-        with open(backup_dest, "w", encoding="utf-8") as f:
+        # O_EXCL: the backup file is created restrictively (0600) from its
+        # very first instant, and only relaxed to orig_mode after the
+        # content is written. If a backup already sits at this path (e.g. a
+        # same-second rerun), fail loudly rather than silently overwrite it.
+        backup_fd = os.open(backup_dest, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(backup_fd, "w", encoding="utf-8") as f:
             f.write(original_text)
         os.chmod(backup_dest, orig_mode)
     else:

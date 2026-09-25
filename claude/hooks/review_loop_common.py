@@ -161,6 +161,14 @@ def _untracked_scan(root, collect_content=False):
     alters the fingerprint — followed by one final summary part. A read that
     fails outright (permissions, races, ...) is recorded as unreadable.
 
+    The total budget is charged for every byte actually read off disk,
+    including an over-limit file's probe read and the read that tips a file
+    into "unread" — not just for fully-read/hashed files. Otherwise a tree
+    full of over-limit files could each spend up to file_limit+1 bytes of
+    real I/O for free, unbounded by the total limit. The budget is also
+    checked before opening a file at all: once it's exhausted, remaining
+    files are marked unread without ever being opened.
+
     collect_content=True additionally returns the exact bytes read for every
     fully-read file, keyed by rel path — so a second consumer (the review
     packet, which needs the actual content, not just a hash) can reuse this
@@ -187,7 +195,14 @@ def _untracked_scan(root, collect_content=False):
             parts.append(rel)
             continue
         remaining_total = total_limit - total_read
-        cap = min(file_limit, max(remaining_total, 0))
+        if remaining_total <= 0:
+            # No budget left even for a single probe byte — don't open the
+            # file at all.
+            stopped = True
+            unread.append(rel)
+            parts.append(rel)
+            continue
+        cap = min(file_limit, remaining_total)
         path = os.path.join(root, rel)
         try:
             with open(path, "rb") as f:
@@ -196,6 +211,12 @@ def _untracked_scan(root, collect_content=False):
             unreadable.append(rel)
             parts.append(f"{rel}:<unreadable: {rel}>")
             continue
+        # Every byte actually read counts against the total budget, whether
+        # the file turns out to be over the per-file limit, tips the total
+        # over, or is fully read — an over-limit file's probe read still
+        # touched disk and must not be free to repeat for every other
+        # over-limit file in the tree.
+        total_read += len(data)
         if len(data) > file_limit:
             over_limit.append(rel)
             parts.append(f"{rel}:<over-limit:{file_limit}>")
@@ -205,7 +226,6 @@ def _untracked_scan(root, collect_content=False):
             unread.append(rel)
             parts.append(rel)
             continue
-        total_read += len(data)
         parts.append(f"{rel}:{hashlib.sha256(data).hexdigest()}")
         if collect_content:
             contents[rel] = data
@@ -248,21 +268,6 @@ def untracked_status(root):
     return status
 
 
-def untracked_content(root):
-    """(status, contents) from one bounded scan; contents maps rel -> bytes
-    for every file that was fully read under the caps (the same files
-    untracked_status() would NOT list in over_limit/unread/unreadable).
-
-    Build the review packet's embedded content from this, not from a second
-    unbounded open()+read() of each file — re-reading without a bound would
-    reopen the TOCTOU gap _untracked_scan's bounded read closes (a file that
-    grows between the status scan and a later full read would get fully
-    embedded even though it's over limit).
-    """
-    _, status, contents = _untracked_scan(root, collect_content=True)
-    return status, contents
-
-
 def untracked_incomplete_suffix(root):
     """" (untracked content over limit: N files not fully checked)", or ""
     when untracked_status() reports complete. N counts over-limit, unread,
@@ -288,28 +293,56 @@ def base_sha(root):
     return out.strip() if rc == 0 and out.strip() else "none"
 
 
-def cheap_worktree_fp_and_status(root):
-    """(fp, status) from a single untracked-file scan.
+def worktree_snapshot(root):
+    """One untracked-file scan (with content) plus the git diffs needed for
+    the fingerprint — the single source of truth for the fp, the
+    completeness status, and the review packet body.
 
-    A caller that needs to know whether the fp it just captured actually
-    covers every untracked file's content (e.g. reviewer.cmd_prepare, which
-    persists both into packet metadata) must get them from the same scan —
-    two separate calls to untracked_fp_parts()/untracked_status() could in
-    principle observe a different tree (a file edited in between) and
-    disagree about what the fp describes.
+    reviewer.cmd_prepare used to call cheap_worktree_fp_and_status() for the
+    packet metadata and then build_packet() ran its own, separate
+    untracked-content scan for the packet body. Two scans can observe two
+    different trees (a file can grow or change in between), so the metadata
+    could say complete=true while the packet it describes actually shows
+    REVIEW INCOMPLETE, or vice versa — and a `finalize --verdict pass` would
+    trust the (wrong) metadata. Call this once and hand the same snapshot to
+    both the metadata writer and build_packet() instead.
+
+    Returns {"fp": str, "status": {...}, "contents": {rel: bytes, ...},
+    "untracked": [rel, ...]}. "status" and "contents" are exactly
+    untracked_status()/untracked_fp_parts() (with collect_content=True) would
+    produce. "untracked" is every untracked rel path, reconstructed from
+    "contents" plus status's over_limit/unread/unreadable buckets (every rel
+    falls into exactly one of those four) rather than a second
+    `git ls-files` call.
     """
-    untracked_parts, status, _ = _untracked_scan(root)
-    parts = [
+    untracked_parts, status, contents = _untracked_scan(root, collect_content=True)
+    fp_parts = [
         base_sha(root),
         run_git(root, ["diff", "HEAD", "--", ".", ":!.agent"])[1],
         run_git(root, ["diff", "--cached", "HEAD", "--", ".", ":!.agent"])[1],
         "\n".join(untracked_parts),
     ]
-    return sha12("\n".join(parts)), status
+    untracked = sorted(
+        list(contents.keys()) + status["over_limit"] + status["unread"] + status["unreadable"]
+    )
+    return {
+        "fp": sha12("\n".join(fp_parts)),
+        "status": status,
+        "contents": contents,
+        "untracked": untracked,
+    }
+
+
+def cheap_worktree_fp_and_status(root):
+    """(fp, status) — thin wrapper over worktree_snapshot() for callers that
+    don't need the untracked file contents or the reconstructed file list.
+    """
+    snap = worktree_snapshot(root)
+    return snap["fp"], snap["status"]
 
 
 def cheap_worktree_fp(root):
-    return cheap_worktree_fp_and_status(root)[0]
+    return worktree_snapshot(root)["fp"]
 
 
 STATE_DEFAULTS = {

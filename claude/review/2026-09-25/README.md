@@ -103,6 +103,16 @@ Codex 第四輪（審核範圍 `13c059a..02c4912`）再重現兩項 hook 正確�
 
 hooks 測試 38 個、合併測試 20 個全過；對本機 settings 副本預演仍為逐位元不變。已知殘留：`build_packet` 列出未追蹤檔與有界掃描是兩次 git 呼叫，期間新增的檔案會被標為 unreadable 而非內容，屬 fail-closed。
 
+## Codex 第十輪（審核範圍 `d39ac00..8246bb4`）的修正
+
+| 編號 | 問題 | 修正 |
+|---|---|---|
+| P1 | metadata 與封包內容仍是兩次掃描，掃描之間檔案變大時 metadata 說完整、封包卻標 INCOMPLETE，finalize pass 仍成功 | 新增 `worktree_snapshot()` 單次擷取，指紋、完整性、封包內容與未追蹤檔清單都從同一份 snapshot 產生；`build_packet` 改為接收 snapshot、不再自行掃描（同時消掉前一輪標出的兩次列清單殘留）。回歸測試在第一次掃描後把檔案變大，斷言 prepare 只掃描一次且 metadata 與封包一致 |
+| P2 | 超限探測讀到的 bytes 沒計入總量，十個超限檔實際讀 1,010 bytes | 每次讀取都累加 `total_read`，預算耗盡前先判斷、不再開檔。十個 150-byte 檔在 100／250 上限下只開 3 個、共讀 251 bytes |
+| P2 | 備份檔先以 umask 預設權限寫入完整內容再 chmod，期間可被讀取 | 備份以 `os.open(O_CREAT\|O_EXCL, 0600)` 建立後才寫入，寫完再放回原權限；備份路徑已存在時直接失敗不覆蓋 |
+
+hooks 測試 42 個、合併測試 22 個全過；對本機 settings 副本預演仍為逐位元不變。
+
 ## 驗證
 
 - 兩個 JSON 候選檔可被 `json.load` 解析。
