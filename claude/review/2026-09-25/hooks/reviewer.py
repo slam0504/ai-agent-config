@@ -34,15 +34,30 @@ def build_packet(root):
     parts.append("## git diff (unstaged, full)\n\n```diff\n" + c.run_git(root, ["diff"])[1] + "\n```")
     untracked = c.untracked_files(root)
     if untracked:
+        status = c.untracked_status(root)
+        skip = set(status["over_limit"]) | set(status["unread"])
+        if not status["complete"]:
+            file_limit, total_limit = c.current_untracked_limits()
+            lines = [f"- {rel}: over per-file limit ({file_limit} bytes)"
+                     for rel in status["over_limit"]]
+            lines += [f"- {rel}: unread (total limit {total_limit} bytes exceeded)"
+                      for rel in status["unread"]]
+            parts.insert(0, "## REVIEW INCOMPLETE: untracked content over limit\n\n"
+                             f"Per-file limit: {file_limit} bytes; total limit: {total_limit} bytes. "
+                             "Content below does not cover these untracked files:\n\n"
+                             + "\n".join(lines))
         sections = []
-        for rel in untracked:
+        for rel in sorted(untracked):
+            if rel in skip:
+                continue
             try:
                 with open(os.path.join(root, rel), errors="replace") as f:
                     content = f.read()
             except OSError:
                 content = f"<unreadable: {rel}>"
             sections.append(f"### {rel}\n\n```\n{content}\n```")
-        parts.append("## Untracked files (full content)\n\n" + "\n\n".join(sections))
+        if sections:
+            parts.append("## Untracked files (full content)\n\n" + "\n\n".join(sections))
     return "\n\n".join(parts) + "\n"
 
 

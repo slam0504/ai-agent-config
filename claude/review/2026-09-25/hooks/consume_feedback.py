@@ -35,16 +35,17 @@ def run(raw_stdin):
     header, body = c.parse_feedback_header(md)
     current_fp = c.cheap_worktree_fp(root)
     reviewed_fp = header.get("reviewed_worktree_fp", "")
+    suffix = c.untracked_incomplete_suffix(root)
 
     if reviewed_fp and reviewed_fp != current_fp:
         _emit(f"Codex review-loop: feedback is STALE (reviewed {reviewed_fp}, "
               f"current tree {current_fp}). Read .agent/review-loop/codex-feedback.md "
-              f"only if still relevant.")
+              f"only if still relevant.{suffix}")
     else:
         cap = c.get_int("RL_FEEDBACK_MAXCHARS", FEEDBACK_DEFAULT_CAP)
         head = (f"Codex review-loop feedback "
                 f"(verdict={header.get('verdict', 'needs_changes')}, "
-                f"iteration={header.get('iteration', '?')}):\n\n")
+                f"iteration={header.get('iteration', '?')}){suffix}:\n\n")
         _emit(c.truncate(head + body, cap))
 
     state["last_consumed_feedback_hash"] = feedback_hash

@@ -119,24 +119,114 @@ def untracked_files(root):
     return [b.decode("utf-8", "surrogateescape") for b in p.stdout.split(b"\0") if b]
 
 
+# Per-file and total caps on how many bytes of untracked-file content get
+# hashed/embedded. On a repo with no .gitignore and huge untracked trees
+# (node_modules, build output) reading every byte of every untracked file
+# made the Stop hook slow and the review packet enormous. Overridable via env
+# so tests (and users) can tune without editing code; read at call time via
+# current_untracked_limits(), not frozen into a constant, so an env override
+# set after import still takes effect.
+UNTRACKED_FILE_LIMIT_BYTES = 1024 * 1024  # 1 MiB, per file
+UNTRACKED_TOTAL_LIMIT_BYTES = 8 * 1024 * 1024  # 8 MiB, summed over all untracked files
+
+
+def current_untracked_limits():
+    """Return (file_limit_bytes, total_limit_bytes), honoring env overrides."""
+    return (
+        get_int("RL_UNTRACKED_FILE_LIMIT", UNTRACKED_FILE_LIMIT_BYTES),
+        get_int("RL_UNTRACKED_TOTAL_LIMIT", UNTRACKED_TOTAL_LIMIT_BYTES),
+    )
+
+
+def _untracked_scan(root):
+    """One pass over untracked files producing both fp parts and a status dict.
+
+    Iterates paths in sorted order for determinism. A file over the per-file
+    limit is not read; it contributes "{rel}:<over-limit:{size}>" (size from
+    os.stat) so the fingerprint still reacts to a rename but not to a content
+    edit that doesn't change size. Once the running total of bytes actually
+    read would exceed the total limit, no further files are read: each
+    remaining path contributes just its (unhashed) name — so a path change
+    still alters the fingerprint — followed by one final summary part.
+
+    Returns (parts, status) where status is
+    {"complete": bool, "over_limit": [rel, ...], "unread": [rel, ...]}.
+    """
+    file_limit, total_limit = current_untracked_limits()
+    parts = []
+    over_limit = []
+    unread = []
+    total_read = 0
+    stopped = False
+    for rel in sorted(untracked_files(root)):
+        if stopped:
+            unread.append(rel)
+            parts.append(rel)
+            continue
+        path = os.path.join(root, rel)
+        try:
+            size = os.stat(path).st_size
+        except OSError:
+            parts.append(f"{rel}:<unreadable: {rel}>")
+            continue
+        if size > file_limit:
+            over_limit.append(rel)
+            parts.append(f"{rel}:<over-limit:{size}>")
+            continue
+        if total_read + size > total_limit:
+            stopped = True
+            unread.append(rel)
+            parts.append(rel)
+            continue
+        try:
+            with open(path, "rb") as f:
+                data = f.read()
+        except OSError:
+            parts.append(f"{rel}:<unreadable: {rel}>")
+            continue
+        total_read += len(data)
+        parts.append(f"{rel}:{hashlib.sha256(data).hexdigest()}")
+    if stopped:
+        parts.append(f"<total-over-limit:{len(unread)} files unread>")
+    status = {
+        "complete": not over_limit and not unread,
+        "over_limit": over_limit,
+        "unread": unread,
+    }
+    return parts, status
+
+
 def untracked_fp_parts(root):
     """Per-file "path:sha256(bytes)" entries for untracked files, for fingerprinting.
 
     Hashes raw bytes (not text-decoded content) so binary/invalid-UTF-8
     content that would collide under lossy decoding still fingerprints
     distinctly. A read failure is recorded explicitly rather than silently
-    treated as empty.
+    treated as empty. Files over UNTRACKED_FILE_LIMIT_BYTES, or beyond
+    UNTRACKED_TOTAL_LIMIT_BYTES cumulative, are not read — see _untracked_scan.
     """
-    parts = []
-    for rel in untracked_files(root):
-        try:
-            with open(os.path.join(root, rel), "rb") as f:
-                data = f.read()
-        except OSError:
-            parts.append(f"{rel}:<unreadable: {rel}>")
-            continue
-        parts.append(f"{rel}:{hashlib.sha256(data).hexdigest()}")
+    parts, _ = _untracked_scan(root)
     return parts
+
+
+def untracked_status(root):
+    """{"complete", "over_limit", "unread"} for the untracked-file content cap.
+
+    Computed by the same rules as untracked_fp_parts() (shared _untracked_scan
+    pass), so callers can tell whether a review actually covered every
+    untracked file's content.
+    """
+    _, status = _untracked_scan(root)
+    return status
+
+
+def untracked_incomplete_suffix(root):
+    """" (untracked content over limit: N files unread)" or "" when complete."""
+    status = untracked_status(root)
+    if status["complete"]:
+        return ""
+    n = len(status["over_limit"]) + len(status["unread"])
+    return f" (untracked content over limit: {n} files unread)"
 
 
 def tree_dirty(root):
