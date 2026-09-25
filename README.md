@@ -99,7 +99,7 @@ The script backs up existing destination files before copying.
 
 ### Codex config
 
-Pending review: [2026-09-25 local Codex configuration](codex/review/2026-09-25/README.md).
+Review record: [2026-09-25 local Codex configuration](codex/review/2026-09-25/README.md) (approved and merged into the template).
 
 `~/.codex/config.toml` is assembled from `codex/config.toml.template` (portable
 settings) plus an optional, gitignored `codex/config.local.toml` (machine-specific

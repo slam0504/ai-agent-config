@@ -1,5 +1,9 @@
 # Codex 設定整理（待審核）
 
+**已核可（2026-09-25 16:10）**：共用候選併入 `codex/config.toml.template`，本機範例併入 `codex/config.local.toml.example`，本機 gitignored `codex/config.local.toml` 依 `~/.codex/config.toml` 重建（34 筆專案信任、zhtw 與 agent-mailroom MCP、TUI 狀態），組裝結果與原本機設定語意相同並已落地；候選檔已從本目錄移除，本文件保留為審核紀錄。Playwright 仍用 `@latest`，各機器實際版本不固定，已在模板註解說明。
+
+以下為核可前的原始審核內容。
+
 本次將本機設定拆成共用候選與本機範例，供人工審核。`install.sh` 不讀取本目錄；正式模板、本機設定與權限規則均未修改，也未執行正式安裝、commit 或 push。
 
 ## 來源
