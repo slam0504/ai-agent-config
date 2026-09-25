@@ -20,3 +20,7 @@ rollout_summaries/
 # Machine-specific Codex overlay (absolute project paths + trust). Not portable.
 codex/config.local.toml
 
+
+# Python bytecode from running hook tests
+__pycache__/
+*.pyc

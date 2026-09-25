@@ -1,0 +1,28 @@
+{
+  "env": {
+    "PATH": "/Users/example/go/bin:/Users/example/.local/bin:/Users/example/.antigravity/antigravity/bin:/usr/local/opt/go@1.24/bin:/Users/example/Library/Python/3.9/bin:/Users/example/.local/share/zinit/polaris/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Users/example/.cargo/bin:/Users/example/.orbstack/bin"
+  },
+  "permissions": {
+    "allow": [
+      "Read(//Users/example/go/bin/**)",
+      "Bash(/Users/example/go/bin/golangci-lint run:*)",
+      "Bash(/Users/example/go/bin/golangci-lint version:*)",
+      "Read(//Users/example/.claude/**)"
+    ],
+    "additionalDirectories": [
+      "/Users/example/.claude"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/bin/python3 /Users/example/playground/telegram/stop_hook.py"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -5,9 +5,11 @@ Personal AI agent configuration for syncing durable rules and settings across ma
 ## Contents
 
 - `codex/AGENTS.md`: global Codex collaboration rules.
-- `codex/config.toml`: Codex user-level configuration.
+- `codex/config.toml.template`: portable Codex user-level configuration.
+- `codex/review/`: pending configuration proposals; never installed automatically.
 - `codex/skills/distill/SKILL.md`: Codex `$distill` workflow for reviewed memory candidates.
 - `claude/CLAUDE.md`: global Claude Code collaboration rules.
+- `claude/review/`: pending Claude configuration proposals; never installed automatically. Current: [2026-09-25](claude/review/2026-09-25/README.md).
 - `memories/review/`: proposed memory entries that are not loaded by agents.
 - `memories/approved/`: reviewed memory entries that can be synced across machines.
 - `memories/rejected/`: rejected candidates kept only when useful for audit.
@@ -96,6 +98,8 @@ From a clone of this repo:
 The script backs up existing destination files before copying.
 
 ### Codex config
+
+Pending review: [2026-09-25 local Codex configuration](codex/review/2026-09-25/README.md).
 
 `~/.codex/config.toml` is assembled from `codex/config.toml.template` (portable
 settings) plus an optional, gitignored `codex/config.local.toml` (machine-specific

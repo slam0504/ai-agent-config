@@ -1,0 +1,207 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/usr/local/bin/python3:*)",
+      "Bash(open:*)",
+      "Bash(go test:*)",
+      "Bash(go build:*)",
+      "Bash(mockery --version)",
+      "Bash(go run:*)",
+      "Bash(git checkout:*)",
+      "Bash(git branch:*)",
+      "Bash(go vet:*)",
+      "Bash(golangci-lint run:*)",
+      "Bash(go env:*)",
+      "Bash(python merge_dicts.py)",
+      "Bash(/usr/local/bin/pip3 install:*)",
+      "Bash(sort -t/ -k6 -n)",
+      "Bash(go doc:*)",
+      "Bash(find . -path */go-module* -name *.go)",
+      "Bash(make test-gen:*)",
+      "Bash(make lint-fix:*)",
+      "Bash(go tool:*)",
+      "Bash(make docs:*)",
+      "Bash(make lint:*)",
+      "Bash(mkdir -p ~/.claude/skills/commit-ready ~/.claude/skills/gmp-pr-check ~/.claude/skills/gmp-new-module ~/.claude/skills/bo2-new-page)",
+      "mcp__serena__write_memory",
+      "Bash(serena-hooks --help)",
+      "Bash(serena-hooks activate *)",
+      "mcp__serena__read_memory",
+      "AskUserQuestion",
+      "Bash(glab mr *)",
+      "Bash(glab api *)",
+      "Bash(grep -nE \"hex|/v2|record|function |\\\\\\\\\\\\$.*url|->get\\\\\\(|->post\\\\\\(|->request|uri|path\" app/Repository/Green/OperationRecord.php)",
+      "Bash(grep -rnE \"operation/record|operation.{0,3}record.{0,3}v2|/hex/user/.*record\" green_back_agent green_back_control)",
+      "Bash(command -v glab)",
+      "Bash(glab auth *)",
+      "Bash(git symbolic-ref *)"
+    ],
+    "defaultMode": "auto"
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "mkdir -p \"${CLAUDE_PROJECT_DIR:-.}/.remember/logs\""
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "serena-hooks activate --client=claude-code"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/sessionstart-restore.sh\""
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/review-loop-status.sh\""
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/codex-review-plan.py"
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "serena-hooks remind --client=claude-code"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__serena__*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "serena-hooks auto-approve --client=claude-code"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/review-loop-stop.sh\""
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "serena-hooks cleanup --client=claude-code"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/precompact-checkpoint.sh\""
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/review-loop-consume.sh\""
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "codex@openai-codex": true,
+    "playwright@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true,
+    "code-review@claude-plugins-official": true,
+    "pr-review-toolkit@claude-plugins-official": true,
+    "commit-commands@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true,
+    "claude-code-setup@claude-plugins-official": true,
+    "feature-dev@claude-plugins-official": true,
+    "context7@claude-plugins-official": true,
+    "superpowers@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true,
+    "atlassian@claude-plugins-official": true,
+    "github@claude-plugins-official": true,
+    "gopls-lsp@claude-plugins-official": true,
+    "gitlab@claude-plugins-official": true,
+    "php-lsp@claude-plugins-official": true,
+    "remember@claude-plugins-official": true,
+    "laravel-boost@claude-plugins-official": true,
+    "mcp-server-dev@claude-plugins-official": true,
+    "datadog@claude-plugins-official": true,
+    "firecrawl@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": true,
+    "telegram@claude-plugins-official": true,
+    "serena@claude-plugins-official": true,
+    "playground@claude-plugins-official": true,
+    "sepia@sepia": true
+  },
+  "extraKnownMarketplaces": {
+    "claude-plugins-official": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-plugins-official"
+      }
+    },
+    "openai-codex": {
+      "source": {
+        "source": "github",
+        "repo": "openai/codex-plugin-cc"
+      }
+    },
+    "sepia": {
+      "source": {
+        "source": "github",
+        "repo": "Nanako0129/sepia"
+      }
+    }
+  },
+  "language": "繁體中文",
+  "effortLevel": "high",
+  "tui": "fullscreen",
+  "skipDangerousModePermissionPrompt": true,
+  "editorMode": "vim",
+  "agentPushNotifEnabled": true,
+  "skipAutoPermissionPrompt": true,
+  "useAutoModeDuringPlan": true
+}
