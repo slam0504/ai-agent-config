@@ -15,7 +15,7 @@
 
 | 檔案 | 狀況 | 處理 |
 |---|---|---|
-| `claude/CLAUDE.md` | 本機 `~/.claude/CLAUDE.md` 於 2026-08-26 被直接編輯，「Subagent 委派」一節擴寫成「Subagent 委派與模型分工（Fable 主腦 + Sonnet 執行）」，repo 來源落後 | 正式來源維持原版；本機版本放在本目錄 `CLAUDE.md` 待審，第四輪依審核修訂三處：model 敘述改為條件式（不宣稱 settings 有 `model` 欄位）、重派無進展或 Agent tool 不可用時主 agent 可在原授權範圍接手、使用者安裝的自訂 agent 依使用者要求或專案指定啟動且不必每次重問。**本目錄版本因此與本機 `~/.claude/CLAUDE.md` 不再相同**，核可後需同時更新正式來源與本機。差異可用 `diff claude/CLAUDE.md claude/review/2026-09-25/CLAUDE.md` 檢視。核准前這台機器的 `./install.sh` 會被 drift guard 擋下該檔，屬預期行為 |
+| `claude/CLAUDE.md` | 本機 `~/.claude/CLAUDE.md` 於 2026-08-26 被直接編輯，「Subagent 委派」一節擴寫成「Subagent 委派與模型分工（Fable 主腦 + Sonnet 執行）」，repo 來源落後 | **已核可（2026-09-25 16:06）**：候選版本（含第四輪三處修訂）覆蓋正式來源 `claude/CLAUDE.md`，並手動同步到本機 `~/.claude/CLAUDE.md`（舊版備份於 `~/.ai-agent-config-backup/`），本目錄的候選副本已移除 |
 | `claude/skills/distill/` | 與本機完全相同 | 不重複複製 |
 | `memories/approved/` | 與本機 `~/.claude/docs/memories/approved/` 完全相同 | 不動 |
 
@@ -104,7 +104,7 @@ Codex 第四輪（審核範圍 `13c059a..02c4912`）再重現兩項 hook 正確�
 
 1. `settings.json`：接受共用候選的取捨，並決定 `install.sh` 是否安裝它（含 JSON 合併策略）。
 2. `hooks/`、`agents/`、`scripts/`、`skills/commit-ready/`：決定是否納入 `install.sh`，以及是否比照 `memories/approved/` 豁免 drift guard。
-3. `CLAUDE.md`：Sonnet 委派規則是否核可為跨機器規則；核可後以本目錄版本覆蓋 `claude/CLAUDE.md`。
+3. `CLAUDE.md`：已核可並落地（2026-09-25）。
 4. hooks 修正已全部同步回本機（第三輪 15:28、第四輪 16:03）。候選與本機 15 個 hook 檔案目前一致。
 5. 未追蹤檔內容雜湊的容量上限與超限標示，另開一次修改。
 6. 核准的項目從本目錄移到 `claude/` 正式位置後，再更新 `install.sh` 與根目錄 README。

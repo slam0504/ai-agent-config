@@ -54,9 +54,14 @@ Project-specific 事實 / 任務狀態請看 `~/.claude/projects/<slug>/memory/`
 
 優先選擇滿足已確認需求的最小可靠方案。不在沒有實際重複或複雜度支撐時新增 abstraction、不把局部 bug fix 擴大成大範圍 refactor、不預先設計用不到的 extension point、不為「看起來完整」加入沒有驗證價值的文件或流程。只有現有 code 已出現實際重複、repo 已有明確 pattern、或使用者明確要求可擴充性時，才引入較大設計。
 
-### Subagent 委派
+### Subagent 委派與模型分工（Fable 主腦 + Sonnet 執行）
 
-只有大型、可獨立完成且可平行的工作流才委派 subagent。幾個 tool calls 可完成的讀取、序列操作或局部修改直接處理；不要自發為複驗自己的結果而委派，一個 subagent 足夠時不要啟動多個。使用者明定的 subagent review／test 流程，依該流程的觸發條件與數量執行，不視為自發複驗。
+- 當主 agent 使用 Fable 等高能力模型時（實際模型以當次執行設定為準，不假設 settings 已固定），定位是規劃、拆解、審查與整合，目的是節省高階模型 token；適合的執行型工作依下列規則交給 Sonnet subagent
+- 複雜任務必須用 Agent tool 委派並明確指定 `model: "sonnet"`。「複雜」的判斷標準：多檔案實作或重構、大範圍搜索 / 探索、測試撰寫、需要大量讀碼的調查——粗略門檻是預期超過幾個 tool calls、或會產生大量中間輸出佔用主 agent context
+- 委派時 prompt 要自包含：目標、範圍、成功條件、驗證方式。結果回來後主 agent 對照 success criteria 審查、整理後回報使用者
+- 審查不合格時先補充脈絡重派 subagent 修正，不要一開始就自己接手重寫；重派仍無進展、或 Agent tool 不可用時，主 agent 可在原授權範圍內接手並說明原因，只有涉及需求或權限不明才詢問使用者
+- 例外，主 agent 直接處理不委派：幾個 tool calls 可完成的讀取、單檔小修改、簡單問答、需要與使用者互動決策的環節（委派 overhead 反而更貴）
+- 不自發為複驗自己的結果而委派，一個 subagent 足夠時不啟動多個；使用者明定的 subagent review／test 流程（含使用者安裝的自訂 agent，依使用者要求或專案 CLAUDE.md 指定啟動）依其觸發條件與數量執行，不必每次重新詢問，也不視為自發複驗
 
 ### 驗證責任
 
