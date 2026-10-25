@@ -15,6 +15,9 @@ max_concurrent_threads_per_session = 3
 [features]
 memories = true
 
+[features.context_management]
+experimental_mode = true
+
 [plugins."github@openai-curated"]
 enabled = true
 
