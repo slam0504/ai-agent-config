@@ -77,47 +77,24 @@ copy_dir_with_backup() {
   echo "installed $dst"
 }
 
-# Build ~/.codex/config.toml from the portable template plus an optional,
-# machine-specific overlay (codex/config.local.toml, gitignored). Keeps absolute
-# project paths and trust state out of the synced repo.
 build_codex_config() {
   template="$repo_dir/codex/config.toml.template"
   overlay="$repo_dir/codex/config.local.toml"
   dst="$HOME/.codex/config.toml"
 
-  if [ ! -f "$template" ]; then
-    echo "missing source: $template" >&2
-    exit 1
+  set -- "$repo_dir/codex/merge-config.py" "$template" "$overlay" "$dst" "$backup_dir"
+  if [ "$force" -eq 1 ]; then
+    set -- "$@" --force
   fi
-
-  # Assemble the desired config into a temp file first, so the drift guard can
-  # compare the assembled result (not a single source file) against the dst.
-  tmp=$(mktemp)
-  cat "$template" > "$tmp"
-  if [ -f "$overlay" ]; then
-    printf '\n' >> "$tmp"
-    cat "$overlay" >> "$tmp"
-  fi
-
-  if [ -e "$dst" ] && [ "$force" -eq 0 ] && ! diff -q "$tmp" "$dst" >/dev/null 2>&1; then
-    echo "DRIFT: $dst differs from assembled config; skipped (re-run with --force)" >&2
-    skipped="$skipped $dst"
-    rm -f "$tmp"
+  if python3 "$@"; then
     return 0
-  fi
-
-  if [ -e "$dst" ]; then
-    mkdir -p "$backup_dir/$(dirname "${dst#$HOME/}")"
-    cp "$dst" "$backup_dir/${dst#$HOME/}"
-  fi
-
-  mkdir -p "$(dirname "$dst")"
-  cp "$tmp" "$dst"
-  rm -f "$tmp"
-  if [ -f "$overlay" ]; then
-    echo "installed $dst (template + local overlay)"
   else
-    echo "installed $dst (template only — no codex/config.local.toml)"
+    result=$?
+    if [ "$result" -eq 3 ]; then
+      skipped="$skipped $dst"
+    else
+      exit "$result"
+    fi
   fi
 }
 

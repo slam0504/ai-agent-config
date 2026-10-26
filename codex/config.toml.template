@@ -1,11 +1,10 @@
-# Portable Codex user-level settings. install.sh concatenates codex/config.local.toml
-# (gitignored, machine-specific) after this to build ~/.codex/config.toml.
+# Portable Codex user-level settings. install.sh merges this and the optional
+# codex/config.local.toml into ~/.codex/config.toml, preserving local-only keys.
 # Approved 2026-09-25 from codex/review/2026-09-25/. Playwright uses @latest: the
 # actual MCP version is resolved per machine at launch and is not pinned here.
-model = "gpt-5.6-sol"
-model_reasoning_effort = "high"
+model = "gpt-6.1-sol"
+model_reasoning_effort = "medium"
 model_verbosity = "low"
-service_tier = "priority"
 
 [agents]
 default_subagent_model = "gpt-5.6-terra"
@@ -14,9 +13,6 @@ max_concurrent_threads_per_session = 3
 
 [features]
 memories = true
-
-[features.context_management]
-experimental_mode = true
 
 [plugins."github@openai-curated"]
 enabled = true
@@ -31,3 +27,6 @@ source = "https://github.com/Nanako0129/sepia.git"
 [mcp_servers.playwright]
 command = "npx"
 args = ["-y", "@playwright/mcp@latest"]
+
+[mcp_servers.openaiDeveloperDocs]
+url = "https://developers.openai.com/mcp"

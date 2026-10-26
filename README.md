@@ -133,11 +133,30 @@ overwriting it:
 
 Review record: [2026-09-25 local Codex configuration](codex/review/2026-09-25/README.md) (approved and merged into the template).
 
-`~/.codex/config.toml` is assembled from `codex/config.toml.template` (portable
-settings) plus an optional, gitignored `codex/config.local.toml` (machine-specific
-project paths and trust). Copy `codex/config.local.toml.example` to
+`codex/merge-config.py` merges `codex/config.toml.template` (portable settings)
+plus an optional, gitignored `codex/config.local.toml` (machine-specific project
+paths and trust) into `~/.codex/config.toml`. Requires Python 3.11 or later.
+The local overlay overrides matching template keys; tables are merged recursively.
+Copy `codex/config.local.toml.example` to
 `codex/config.local.toml` on each machine; absolute paths and trust state are never
 synced across machines.
+
+Only keys present in the template or local overlay are managed. Local-only keys,
+including desktop settings, notification commands, bundled plugins, marketplaces,
+and the App's `node_repl` server, survive installation even with `--force`.
+Existing managed values that conflict with the source still require `--force`;
+new keys can be added without it. Removed managed keys need an explicit migration
+in `REMOVED_KEYS` in the merge script. The current migration removes the old
+Fast service-tier default and the unavailable experimental context-management
+setting. The merged file is normalized TOML; comments and formatting are not
+preserved. Writes are atomic, preserve file permissions, and back up the original.
+
+The default model is `gpt-6.1-sol` with medium reasoning and Standard speed.
+Use `/fast` for Fast mode or `/model` to change reasoning for a particular task.
+The official read-only OpenAI Docs MCP is configured alongside Playwright.
+App-specific MCP environment variables can be absent in an ordinary terminal;
+do not delete the App's server configuration solely because `codex doctor` reports
+those missing variables. To check MCP connectivity in each client, use `/mcp`.
 
 ### Drift guard
 
@@ -150,8 +169,9 @@ re-run. To overwrite anyway (a backup is still taken):
 ./install.sh --force
 ```
 
-The guard applies to machine-editable targets (`CLAUDE.md`, `AGENTS.md`,
-`config.toml`). Repo-authoritative targets the machine should never hand-edit —
+The whole-file guard applies to machine-editable instruction files (`CLAUDE.md`,
+`AGENTS.md`); Codex config uses the managed-key comparison above.
+Repo-authoritative targets the machine should never hand-edit —
 `memories/approved/`, `claude/hooks/`, `claude/agents/`, `claude/scripts/`,
 `claude/skills/commit-ready/` — are exempt and overwritten directly, so
 routine updates don't require `--force`. `claude/settings.json` doesn't use

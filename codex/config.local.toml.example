@@ -2,12 +2,12 @@
 #
 # Copy to codex/config.local.toml and edit for this machine. The real
 # config.local.toml is gitignored, so machine paths, MCP binaries, trust state and
-# TUI state never sync across machines. install.sh concatenates it onto
-# codex/config.toml.template to build ~/.codex/config.toml.
+# TUI state never sync across machines. install.sh merges its managed keys into
+# ~/.codex/config.toml together with codex/config.toml.template.
 # Replace example paths with real local paths. Do not copy project trust blindly.
 # Use ~/.codex/config.toml as the source for missing local project/MCP/TUI sections;
 # merge into the existing local file instead of replacing it with this example.
-# install.sh concatenates TOML; it does not merge duplicate table definitions.
+# Local overlay keys override matching template keys; sibling keys are preserved.
 
 [projects."/Users/example/path/to/project"]
 trust_level = "trusted"
