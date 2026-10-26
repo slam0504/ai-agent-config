@@ -58,7 +58,7 @@
         ]
       },
       {
-        "matcher": "mcp__serena__*",
+        "matcher": "^mcp__(plugin_serena_)?serena__.*$",
         "hooks": [
           {
             "type": "command",
@@ -162,6 +162,11 @@
   },
   "language": "繁體中文",
   "effortLevel": "high",
+  "modelSettings": {
+    "claude-opus-5-5": {
+      "effortLevel": "high"
+    }
+  },
   "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
   "editorMode": "vim",
